@@ -16,10 +16,10 @@ class ToolCallRow
     public static function fromData(array $data): self
     {
         return new self(
-            name: (string) ($data['name'] ?? ''),
+            name: Value::string($data['name'] ?? null) ?? '',
             arguments: is_array($data['arguments'] ?? null) ? $data['arguments'] : [],
-            status: isset($data['status']) ? (string) $data['status'] : null,
-            approval: isset($data['approval']) ? (string) $data['approval'] : null,
+            status: Value::string($data['status'] ?? null),
+            approval: Value::string($data['approval'] ?? null),
         );
     }
 

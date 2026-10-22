@@ -16,9 +16,9 @@ class RunNote
     {
         return new self(
             run: $run,
-            check: (string) ($data['check'] ?? ''),
+            check: Value::string($data['check'] ?? null) ?? '',
             passed: ($data['passed'] ?? false) === true,
-            reason: isset($data['reason']) ? (string) $data['reason'] : null,
+            reason: Value::string($data['reason'] ?? null),
         );
     }
 

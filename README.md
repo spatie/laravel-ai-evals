@@ -265,7 +265,7 @@ When the judge itself fails, for example on a rate limit, it is not held against
 
 ### Viewing results
 
-In the `local` environment, the package registers a small results viewer at `/ai-tests`. It lists the result files and shows each one, with a tab per run. The first failing run is selected. Outside the local environment it returns a 404. Disable it with `ai-tests.viewer.enabled`.
+In the `local` environment, the package registers a small results viewer at `/ai-tests`. It lists the result files and shows each one, with a tab per run. The first failing run is selected. Outside the local environment it returns a 404. Disable it with `ai-tests.viewer.enabled`. A result file that can't be parsed, for example after a merge conflict, is reported and listed as unreadable instead of breaking the viewer. Result files are written to a temporary file first and then moved into place, so the viewer never reads a half-written file.
 
 ## Configuration
 

@@ -1,5 +1,7 @@
 <?php
 
+use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\File;
 use Laravel\Ai\Responses\Data\ToolCall;
 use PHPUnit\Framework\AssertionFailedError;
 use Spatie\LaravelAiTests\Drivers\AgentDriver;
@@ -7,6 +9,7 @@ use Spatie\LaravelAiTests\Judge\JudgeAgent;
 use Spatie\LaravelAiTests\Tests\TestSupport\LookupOrderTool;
 use Spatie\LaravelAiTests\Tests\TestSupport\ShopSeeder;
 use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
+use Symfony\Component\Yaml\Exception\ParseException;
 
 beforeEach(function () {
     $this->app['env'] = 'local';
@@ -147,4 +150,22 @@ it('shows a run the judge could not grade as unjudged', function () {
         ->assertSee('1 unjudged, left out of the pass rate')
         ->assertSeeInOrder(['Judge errors', 'Run 1', 'RuntimeException: The judge is rate limited.'])
         ->assertSee('Run 1, unjudged');
+});
+
+it('reports an unreadable result file and still renders the viewer', function () {
+    Exceptions::fake();
+
+    File::put(config('ai-tests.results_path').'/broken.yaml', "title: Broken\n<<<<<<< HEAD\npassed: [true\n");
+    writeResultFile('odd-values', ['title' => ['not', 'a', 'string'], 'model' => ['gpt'], 'passed' => true]);
+
+    $this->get('/ai-tests')
+        ->assertOk()
+        ->assertSeeInOrder(['broken', 'Unreadable result file'])
+        ->assertSee('odd-values');
+
+    $this->get('/ai-tests/broken')
+        ->assertOk()
+        ->assertSee('This result file could not be read.');
+
+    Exceptions::assertReported(ParseException::class);
 });

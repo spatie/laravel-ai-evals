@@ -16,7 +16,7 @@ class CheckRow
         $runs = is_array($data['runs'] ?? null) ? $data['runs'] : [];
 
         return new self(
-            label: (string) ($data['label'] ?? ''),
+            label: Value::string($data['label'] ?? null) ?? '',
             runs: array_map(fn (mixed $passed): bool => $passed === true, $runs),
         );
     }

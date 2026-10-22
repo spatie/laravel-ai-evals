@@ -72,14 +72,19 @@
                     @foreach ($results as $result)
                         <tr>
                             <td><x-ai-tests::status :status="$result->status()" /></td>
-                            <td class="test"><a href="{{ route('ai-tests.show', $result->slug) }}">{{ $result->title() }}</a></td>
+                            <td class="test">
+                                <a href="{{ route('ai-tests.show', $result->slug) }}">{{ $result->title() }}</a>
+                                @if ($result->error !== null)
+                                    <span class="threshold">Unreadable result file</span>
+                                @endif
+                            </td>
                             <td>
                                 <x-ai-tests::runs :passed="$result->get('passed_runs')" :runs="$result->get('runs')" />
                                 @if ($result->percentage('min_pass_rate') && $result->percentage('min_pass_rate') !== $summary->usualMinPassRate)
                                     <span class="threshold numeric">min {{ $result->percentage('min_pass_rate') }}</span>
                                 @endif
                             </td>
-                            <td class="model column-model">{{ $result->get('model') ?? '–' }}</td>
+                            <td class="model column-model">{{ $result->text('model') ?? '–' }}</td>
                             <td class="ran-at column-ran-at"><x-ai-tests::time :value="$result->ranAt()" /></td>
                         </tr>
                     @endforeach

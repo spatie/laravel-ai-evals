@@ -6,6 +6,8 @@ use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
+use Symfony\Component\Finder\SplFileInfo;
+use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 class ResultFile
@@ -14,11 +16,18 @@ class ResultFile
     public function __construct(
         public string $slug,
         public array $data,
+        public ?string $error = null,
     ) {}
 
     public static function fromPath(string $path): self
     {
-        $data = Yaml::parseFile($path);
+        try {
+            $data = Yaml::parseFile($path);
+        } catch (ParseException $exception) {
+            report($exception);
+
+            return new self(basename($path, '.yaml'), [], $exception->getMessage());
+        }
 
         return new self(basename($path, '.yaml'), is_array($data) ? $data : []);
     }
@@ -26,8 +35,13 @@ class ResultFile
     /** @return Collection<int, self> */
     public static function allIn(string $directory): Collection
     {
-        return collect(File::glob($directory.'/*.yaml'))
-            ->map(fn (string $path): self => self::fromPath($path))
+        if (! File::isDirectory($directory)) {
+            return collect();
+        }
+
+        return collect(File::files($directory))
+            ->filter(fn (SplFileInfo $file): bool => $file->getExtension() === 'yaml')
+            ->map(fn (SplFileInfo $file): self => self::fromPath($file->getPathname()))
             ->sortBy([
                 fn (self $a, self $b): int => ($a->status() !== 'failed') <=> ($b->status() !== 'failed'),
                 fn (self $a, self $b): int => strcasecmp($a->title(), $b->title()),
@@ -42,7 +56,12 @@ class ResultFile
 
     public function title(): string
     {
-        return (string) ($this->get('title') ?? $this->slug);
+        return Value::string($this->get('title')) ?? $this->slug;
+    }
+
+    public function text(string $key): ?string
+    {
+        return Value::string($this->get($key));
     }
 
     public function status(): string
@@ -60,10 +79,10 @@ class ResultFile
     public function facts(): array
     {
         return array_filter([
-            'Model' => $this->get('model'),
-            'Judge' => $this->get('judge_model'),
-            'Seeder' => $this->get('seeder'),
-            'Test file' => $this->get('test_file'),
+            'Model' => $this->text('model'),
+            'Judge' => $this->text('judge_model'),
+            'Seeder' => $this->text('seeder'),
+            'Test file' => $this->text('test_file'),
         ]);
     }
 

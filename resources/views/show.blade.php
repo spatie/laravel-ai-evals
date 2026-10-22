@@ -63,6 +63,8 @@
             .note p { margin: 0; max-width: 75ch; }
             .run-label { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; padding-top: 1px; white-space: nowrap; }
             .crash { margin: 0; padding: 10px 12px; background: var(--failed-background); border-radius: 8px; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+            .unreadable { margin: 0 0 16px; }
+            .unreadable p { margin: 0 0 8px; }
 
             .tablist { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--border-strong); }
             .tablist[hidden] { display: none; }
@@ -187,6 +189,13 @@
                 <span class="muted numeric">{{ $result->get('unjudged_runs') }} unjudged, left out of the pass rate</span>
             @endif
         </p>
+
+        @if ($result->error !== null)
+            <div class="unreadable">
+                <p><strong>This result file could not be read.</strong> Fix or delete it, or run the test again.</p>
+                <p class="crash">{{ $result->error }}</p>
+            </div>
+        @endif
 
         <dl class="facts">
             @foreach ($result->facts() as $label => $value)

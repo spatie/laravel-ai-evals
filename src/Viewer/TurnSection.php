@@ -25,7 +25,7 @@ class TurnSection
 
         return new self(
             number: $number,
-            prompt: isset($data['prompt']) ? (string) $data['prompt'] : null,
+            prompt: Value::string($data['prompt'] ?? null),
             checks: array_map(
                 fn (mixed $check): CheckRow => CheckRow::fromData(is_array($check) ? $check : []),
                 $checks,

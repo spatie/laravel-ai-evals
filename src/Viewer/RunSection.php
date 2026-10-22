@@ -29,18 +29,18 @@ class RunSection
         return new self(
             number: $number,
             passed: ($data['passed'] ?? false) === true,
-            crash: isset($data['crash']) ? (string) $data['crash'] : null,
+            crash: Value::string($data['crash'] ?? null),
             toolCalls: array_values(array_map(
                 fn (mixed $toolCall): ToolCallRow => ToolCallRow::fromData(is_array($toolCall) ? $toolCall : []),
                 $toolCalls,
             )),
-            answer: isset($data['answer']) ? (string) $data['answer'] : null,
+            answer: Value::string($data['answer'] ?? null),
             verdicts: array_values(array_map(
                 fn (array $verdict): RunNote => RunNote::fromData($number, $verdict),
                 array_filter($verdicts, fn (mixed $verdict): bool => is_array($verdict)),
             )),
             notReached: ($data['not_reached'] ?? false) === true,
-            judgeError: isset($data['judge_error']) ? (string) $data['judge_error'] : null,
+            judgeError: Value::string($data['judge_error'] ?? null),
         );
     }
 

@@ -23,7 +23,11 @@ class ResultWriter
 
         File::ensureDirectoryExists(dirname($path));
 
-        File::put($path, $this->render($result));
+        $temporaryPath = $path.'.'.Str::random(8).'.tmp';
+
+        File::put($temporaryPath, $this->render($result));
+
+        File::move($temporaryPath, $path);
 
         return Str::after($path, base_path().DIRECTORY_SEPARATOR);
     }
