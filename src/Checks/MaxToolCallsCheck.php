@@ -28,7 +28,7 @@ class MaxToolCallsCheck extends Check
         $passed = $callCount <= $this->maxCalls;
 
         return new CheckOutcome(
-            label: $this->label(),
+            expectation: $this,
             passed: $passed,
             reason: $passed ? null : "Made {$callCount} tool calls.",
         );

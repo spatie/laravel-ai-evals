@@ -2,12 +2,23 @@
 
 namespace Spatie\LaravelAiTests\Results;
 
+use Spatie\LaravelAiTests\Checks\Expectation;
+
 class CheckOutcome
 {
     public function __construct(
-        public string $label,
+        public Expectation $expectation,
         public bool $passed,
         public ?string $reason = null,
-        public bool $judged = false,
     ) {}
+
+    public function label(): string
+    {
+        return $this->expectation->label();
+    }
+
+    public function judged(): bool
+    {
+        return $this->expectation->kind() === 'rubric';
+    }
 }

@@ -5,13 +5,14 @@ namespace Spatie\LaravelAiTests\Judge;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use LogicException;
+use Spatie\LaravelAiTests\Checks\RubricCriterion;
 use Spatie\LaravelAiTests\Results\CheckOutcome;
 use Spatie\LaravelAiTests\Transcript\ToolCallRecord;
 use Spatie\LaravelAiTests\Transcript\Transcript;
 
 class Judge
 {
-    /** @param array<int, string> $rubric */
+    /** @param array<int, RubricCriterion> $rubric */
     public function evaluate(array $rubric, Transcript $transcript): JudgeResult
     {
         if ($rubric === []) {
@@ -33,9 +34,9 @@ class Judge
         $verdicts = collect($response['verdicts'] ?? [])->keyBy('criterion');
 
         $outcomes = array_map(
-            fn (string $criterion, int $index): CheckOutcome => $this->outcome($criterion, $verdicts->get($index + 1)),
-            $rubric,
-            array_keys($rubric),
+            fn (RubricCriterion $criterion, int $index): CheckOutcome => $this->outcome($criterion, $verdicts->get($index + 1)),
+            array_values($rubric),
+            array_keys(array_values($rubric)),
         );
 
         return new JudgeResult($outcomes, $response->meta->model);
@@ -72,21 +73,21 @@ class Judge
         ]);
     }
 
-    /** @param array<int, string> $rubric */
+    /** @param array<int, RubricCriterion> $rubric */
     protected function numberedCriteria(array $rubric): string
     {
-        return collect($rubric)
-            ->map(fn (string $criterion, int $index): string => ($index + 1).". {$criterion}")
+        return collect(array_values($rubric))
+            ->map(fn (RubricCriterion $criterion, int $index): string => ($index + 1).". {$criterion->criterion}")
             ->implode("\n");
     }
 
     /** @param array{criterion: int, reason: string, pass: bool}|null $verdict */
-    protected function outcome(string $criterion, ?array $verdict): CheckOutcome
+    protected function outcome(RubricCriterion $criterion, ?array $verdict): CheckOutcome
     {
         if ($verdict === null) {
-            return new CheckOutcome($criterion, passed: false, reason: 'The judge returned no verdict.', judged: true);
+            return new CheckOutcome($criterion, passed: false, reason: 'The judge returned no verdict.');
         }
 
-        return new CheckOutcome($criterion, passed: $verdict['pass'], reason: $verdict['reason'], judged: true);
+        return new CheckOutcome($criterion, passed: $verdict['pass'], reason: $verdict['reason']);
     }
 }

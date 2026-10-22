@@ -6,8 +6,10 @@ use Closure;
 use Spatie\LaravelAiTests\Checks\CallsToolCheck;
 use Spatie\LaravelAiTests\Checks\Check;
 use Spatie\LaravelAiTests\Checks\DoesNotCallToolCheck;
+use Spatie\LaravelAiTests\Checks\Expectation;
 use Spatie\LaravelAiTests\Checks\MaxToolCallsCheck;
 use Spatie\LaravelAiTests\Checks\MaxWordsCheck;
+use Spatie\LaravelAiTests\Checks\RubricCriterion;
 
 class Turn
 {
@@ -16,7 +18,7 @@ class Turn
     /** @var array<int, Check> */
     public array $checks = [];
 
-    /** @var array<int, string> */
+    /** @var array<int, RubricCriterion> */
     public array $rubric = [];
 
     public function __construct(
@@ -54,9 +56,17 @@ class Turn
 
     public function expectRubric(string ...$criteria): static
     {
-        $this->rubric = [...$this->rubric, ...array_values($criteria)];
+        foreach ($criteria as $criterion) {
+            $this->rubric[] = new RubricCriterion($criterion);
+        }
 
         return $this;
+    }
+
+    /** @return array<int, Expectation> */
+    public function expectations(): array
+    {
+        return [...$this->checks, ...$this->rubric];
     }
 
     public function approveAll(): static

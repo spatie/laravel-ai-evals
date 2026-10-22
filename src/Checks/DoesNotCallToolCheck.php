@@ -29,7 +29,7 @@ class DoesNotCallToolCheck extends Check
         $called = in_array($toolName, $transcript->toolNames(), true);
 
         return new CheckOutcome(
-            label: $this->label(),
+            expectation: $this,
             passed: ! $called,
             reason: $called ? "Called {$toolName}." : null,
         );

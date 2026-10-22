@@ -28,7 +28,7 @@ class MaxWordsCheck extends Check
         $passed = $wordCount <= $this->maxWords;
 
         return new CheckOutcome(
-            label: $this->label(),
+            expectation: $this,
             passed: $passed,
             reason: $passed ? null : "Answered in {$wordCount} words.",
         );

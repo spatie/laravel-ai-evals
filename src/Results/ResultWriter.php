@@ -5,7 +5,7 @@ namespace Spatie\LaravelAiTests\Results;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
-use Spatie\LaravelAiTests\Checks\Check;
+use Spatie\LaravelAiTests\Checks\Expectation;
 use Spatie\LaravelAiTests\Transcript\ToolCallRecord;
 use Spatie\LaravelAiTests\Turn;
 use Symfony\Component\Yaml\Yaml;
@@ -81,20 +81,20 @@ class ResultWriter
     /** @return array<int, array<string, mixed>> */
     protected function checks(TestResult $result, Turn $turn, int $index): array
     {
-        $checks = [
-            ...array_map(fn (Check $check): array => ['label' => $check->label(), 'kind' => $check->kind()], $turn->checks),
-            ...array_map(fn (string $criterion): array => ['label' => $criterion, 'kind' => 'rubric'], $turn->rubric),
-        ];
-
-        return array_map(function (array $check, int $checkIndex) use ($result, $index): array {
+        return array_map(function (Expectation $expectation) use ($result, $index): array {
             $runs = [];
 
             foreach ($result->runs as $run) {
-                $runs[$run->number] = $run->turns[$index]->outcomes[$checkIndex]->passed ?? false;
+                $runs[$run->number] = ($run->turns[$index] ?? null)?->outcomeFor($expectation)->passed ?? false;
             }
 
-            return [...$check, 'passed_runs' => count(array_filter($runs)), 'runs' => $runs];
-        }, $checks, array_keys($checks));
+            return [
+                'label' => $expectation->label(),
+                'kind' => $expectation->kind(),
+                'passed_runs' => count(array_filter($runs)),
+                'runs' => $runs,
+            ];
+        }, $turn->expectations());
     }
 
     /** @return array<string, mixed> */
@@ -129,12 +129,12 @@ class ResultWriter
     {
         $reportedOutcomes = array_filter(
             $turnResult->outcomes,
-            fn (CheckOutcome $outcome): bool => $outcome->judged || ! $outcome->passed,
+            fn (CheckOutcome $outcome): bool => $outcome->judged() || ! $outcome->passed,
         );
 
         return array_values(array_map(
             fn (CheckOutcome $outcome): array => Arr::whereNotNull([
-                'check' => $outcome->label,
+                'check' => $outcome->label(),
                 'passed' => $outcome->passed,
                 'reason' => $outcome->reason,
             ]),

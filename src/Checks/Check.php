@@ -5,7 +5,7 @@ namespace Spatie\LaravelAiTests\Checks;
 use Spatie\LaravelAiTests\Results\CheckOutcome;
 use Spatie\LaravelAiTests\Transcript\Transcript;
 
-abstract class Check
+abstract class Check implements Expectation
 {
     abstract public function label(): string;
 

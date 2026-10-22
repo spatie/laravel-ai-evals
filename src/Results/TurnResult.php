@@ -2,6 +2,8 @@
 
 namespace Spatie\LaravelAiTests\Results;
 
+use Illuminate\Support\Arr;
+use Spatie\LaravelAiTests\Checks\Expectation;
 use Spatie\LaravelAiTests\Transcript\Transcript;
 
 class TurnResult
@@ -22,5 +24,10 @@ class TurnResult
         }
 
         return true;
+    }
+
+    public function outcomeFor(Expectation $expectation): ?CheckOutcome
+    {
+        return Arr::first($this->outcomes, fn (CheckOutcome $outcome): bool => $outcome->expectation === $expectation);
     }
 }
