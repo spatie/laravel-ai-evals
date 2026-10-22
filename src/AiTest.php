@@ -9,6 +9,7 @@ use LogicException;
 use PHPUnit\Framework\Assert;
 use Spatie\LaravelAiTests\Drivers\Driver;
 use Spatie\LaravelAiTests\Results\ResultWriter;
+use Spatie\LaravelAiTests\Results\TestResult;
 
 class AiTest
 {
@@ -103,11 +104,19 @@ class AiTest
 
         $resultPath = app(ResultWriter::class)->write($result);
 
-        $runCount = count($result->runs);
+        Assert::assertTrue($result->passed(), $this->failureMessage($result, $resultPath));
+    }
 
-        Assert::assertTrue(
-            $result->passed(),
-            "{$result->passedRuns()}/{$runCount} runs passed, below the minimum pass rate of {$result->minPassRate}. See {$resultPath}.",
-        );
+    protected function failureMessage(TestResult $result, string $resultPath): string
+    {
+        $summary = $result->judgedRuns() === 0
+            ? 'No run could be judged, because the judge failed in every run.'
+            : "{$result->passedRuns()}/{$result->judgedRuns()} runs passed, below the minimum pass rate of {$result->minPassRate}.";
+
+        if ($result->judgedRuns() > 0 && $result->unjudgedRuns() > 0) {
+            $summary .= " {$result->unjudgedRuns()} unjudged ".Str::plural('run', $result->unjudgedRuns()).' left out.';
+        }
+
+        return implode("\n", ["{$summary} See {$resultPath}.", ...$result->errors()]);
     }
 }

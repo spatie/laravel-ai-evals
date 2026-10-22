@@ -16,6 +16,7 @@ class RunSection
         public ?string $answer,
         public array $verdicts,
         public bool $notReached = false,
+        public ?string $judgeError = null,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -39,12 +40,31 @@ class RunSection
                 array_filter($verdicts, fn (mixed $verdict): bool => is_array($verdict)),
             )),
             notReached: ($data['not_reached'] ?? false) === true,
+            judgeError: isset($data['judge_error']) ? (string) $data['judge_error'] : null,
         );
     }
 
     public function status(): string
     {
-        return $this->passed ? 'passed' : 'failed';
+        return match (true) {
+            $this->passed => 'passed',
+            $this->unjudged() => 'unjudged',
+            default => 'failed',
+        };
+    }
+
+    public function unjudged(): bool
+    {
+        if ($this->judgeError === null) {
+            return false;
+        }
+
+        return array_filter($this->verdicts, fn (RunNote $verdict): bool => ! $verdict->passed) === [];
+    }
+
+    public function showsTranscript(): bool
+    {
+        return $this->crash === null || $this->toolCalls !== [] || $this->answerHtml() !== null;
     }
 
     public function answerHtml(): ?string

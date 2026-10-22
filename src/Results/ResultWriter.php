@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Spatie\LaravelAiTests\Checks\Expectation;
 use Spatie\LaravelAiTests\Transcript\ToolCallRecord;
+use Spatie\LaravelAiTests\Transcript\Transcript;
 use Spatie\LaravelAiTests\Turn;
 use Symfony\Component\Yaml\Yaml;
 
@@ -53,6 +54,7 @@ class ResultWriter
             'judge_model' => $result->judgeModel(),
             'runs' => count($result->runs),
             'passed_runs' => $result->passedRuns(),
+            'unjudged_runs' => $result->unjudgedRuns() > 0 ? $result->unjudgedRuns() : null,
             'pass_rate' => $result->passRate(),
             'min_pass_rate' => $result->minPassRate,
             'passed' => $result->passed(),
@@ -85,7 +87,14 @@ class ResultWriter
             $runs = [];
 
             foreach ($result->runs as $run) {
-                $runs[$run->number] = ($run->turns[$index] ?? null)?->outcomeFor($expectation)->passed ?? false;
+                $turnResult = $run->turns[$index] ?? null;
+                $outcome = $turnResult?->outcomeFor($expectation);
+
+                if ($outcome === null && $turnResult?->judgeError !== null) {
+                    continue;
+                }
+
+                $runs[$run->number] = $outcome->passed ?? false;
             }
 
             return [
@@ -103,7 +112,7 @@ class ResultWriter
         $turnResult = $run->turns[$index] ?? null;
 
         if ($turnResult === null && count($run->turns) === $index) {
-            return ['run' => $run->number, 'passed' => false, 'crash' => (string) Str::of((string) $run->crash)->squish()->limit(500)];
+            return $this->crashedRun($run);
         }
 
         if ($turnResult === null) {
@@ -115,13 +124,40 @@ class ResultWriter
         return Arr::whereNotNull([
             'run' => $run->number,
             'passed' => $turnResult->passed(),
-            'tool_calls' => array_values(array_map(
-                fn (ToolCallRecord $toolCall): array => $this->toolCall($toolCall),
-                $turnResult->transcript->toolCalls,
-            )),
-            'answer' => $this->normalizeLineEndings($turnResult->transcript->answer()),
+            'judge_error' => $turnResult->judgeError !== null ? $this->error($turnResult->judgeError) : null,
+            ...$this->transcript($turnResult->transcript),
             'verdicts' => $verdicts !== [] ? $verdicts : null,
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    protected function crashedRun(RunResult $run): array
+    {
+        $transcript = $run->crashedTurn !== null ? $this->transcript($run->crashedTurn) : [];
+
+        return Arr::whereNotNull([
+            'run' => $run->number,
+            'passed' => false,
+            'crash' => $this->error((string) $run->crash),
+            ...array_filter($transcript),
+        ]);
+    }
+
+    /** @return array{tool_calls: array<int, array<string, mixed>>, answer: string} */
+    protected function transcript(Transcript $transcript): array
+    {
+        return [
+            'tool_calls' => array_values(array_map(
+                fn (ToolCallRecord $toolCall): array => $this->toolCall($toolCall),
+                $transcript->toolCalls,
+            )),
+            'answer' => $this->normalizeLineEndings($transcript->answer()),
+        ];
+    }
+
+    protected function error(string $error): string
+    {
+        return (string) Str::of($error)->squish()->limit(500);
     }
 
     /** @return array<int, array<string, mixed>> */

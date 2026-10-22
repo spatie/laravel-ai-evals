@@ -94,6 +94,12 @@ class TurnSection
         return array_values(array_filter($this->runs, fn (RunSection $run): bool => $run->crash !== null));
     }
 
+    /** @return array<int, RunSection> */
+    public function judgeErrorRuns(): array
+    {
+        return array_values(array_filter($this->runs, fn (RunSection $run): bool => $run->judgeError !== null));
+    }
+
     public function selectedRun(): ?RunSection
     {
         $reachedRuns = array_values(array_filter($this->runs, fn (RunSection $run): bool => ! $run->notReached));

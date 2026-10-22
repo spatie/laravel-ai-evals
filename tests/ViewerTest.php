@@ -125,3 +125,26 @@ it('returns a 404 outside the local environment', function () {
 
     $this->get('/ai-tests')->assertNotFound();
 });
+
+it('shows a run the judge could not grade as unjudged', function () {
+    writeResultFile('unjudged', [
+        'title' => 'Unjudged',
+        'passed' => true,
+        'runs' => 2,
+        'passed_runs' => 1,
+        'unjudged_runs' => 1,
+        'turns' => [[
+            'prompt' => 'Where is my order?',
+            'runs' => [
+                ['run' => 1, 'passed' => false, 'judge_error' => 'RuntimeException: The judge is rate limited.', 'tool_calls' => [], 'answer' => 'It shipped.'],
+                ['run' => 2, 'passed' => true, 'tool_calls' => [], 'answer' => 'It shipped.'],
+            ],
+        ]],
+    ]);
+
+    $this->get('/ai-tests/unjudged')
+        ->assertOk()
+        ->assertSee('1 unjudged, left out of the pass rate')
+        ->assertSeeInOrder(['Judge errors', 'Run 1', 'RuntimeException: The judge is rate limited.'])
+        ->assertSee('Run 1, unjudged');
+});

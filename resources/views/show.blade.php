@@ -73,6 +73,7 @@
             .tab-dot { width: 7px; height: 7px; border-radius: 50%; }
             .tab-passed .tab-dot { background: var(--passed-fill); }
             .tab-failed .tab-dot { background: var(--failed-fill); }
+            .tab-unjudged .tab-dot { background: var(--muted); }
 
             .run { border: 1px solid var(--border-strong); border-radius: 12px; overflow: hidden; }
             .run + .run { margin-top: 16px; }
@@ -182,6 +183,9 @@
             @if ($result->percentage('min_pass_rate'))
                 <span class="muted numeric">min {{ $result->percentage('min_pass_rate') }}</span>
             @endif
+            @if (is_numeric($result->get('unjudged_runs')))
+                <span class="muted numeric">{{ $result->get('unjudged_runs') }} unjudged, left out of the pass rate</span>
+            @endif
         </p>
 
         <dl class="facts">
@@ -205,6 +209,7 @@
             $selectedRun = $turn->selectedRun();
             $failureGroups = $turn->failureGroups();
             $crashedRuns = $turn->crashedRuns();
+            $judgeErrorRuns = $turn->judgeErrorRuns();
         @endphp
         <section class="turn" id="turn-{{ $turn->number }}" aria-labelledby="turn-{{ $turn->number }}-heading">
             <div class="turn-header">
@@ -277,6 +282,20 @@
                 </div>
             @endif
 
+            @if ($judgeErrorRuns !== [])
+                <div class="turn-block">
+                    <h3>Judge errors</h3>
+                    <ul class="notes">
+                        @foreach ($judgeErrorRuns as $run)
+                            <li class="note">
+                                <span class="run-label">Run {{ $run->number }}</span>
+                                <p class="crash">{{ $run->judgeError }}</p>
+                            </li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             @if ($turn->runs !== [])
                 <section class="turn-block" aria-labelledby="turn-{{ $turn->number }}-runs" data-run-tabs>
                     <h3 id="turn-{{ $turn->number }}-runs">Runs</h3>
@@ -305,44 +324,55 @@
                                 <x-ai-tests::status :status="$run->status()" />
                             </div>
 
-                            @if ($run->crash !== null)
-                                <div class="run-section">
-                                    <span class="run-section-label">Crash</span>
-                                    <p class="crash">{{ $run->crash }}</p>
-                                </div>
-                            @elseif ($run->notReached)
+                            @if ($run->notReached)
                                 <div class="run-section">
                                     <p class="muted">This run crashed in an earlier turn.</p>
                                 </div>
                             @else
-                                <div class="run-section">
-                                    <span class="run-section-label">Tool calls</span>
-                                    @if ($run->toolCalls === [])
-                                        <span class="muted">None</span>
-                                    @else
-                                        <ol class="tool-calls">
-                                            @foreach ($run->toolCalls as $toolCall)
-                                                <li>
-                                                    <span class="tool-name">{{ $toolCall->name }}</span>
-                                                    @if ($toolCall->argumentList() !== '')
-                                                        <span class="tool-arguments">({{ $toolCall->argumentList() }})</span>
-                                                    @endif
-                                                    @if ($toolCall->details() !== [])
-                                                        <span class="tool-details">{{ implode(', ', $toolCall->details()) }}</span>
-                                                    @endif
-                                                </li>
-                                            @endforeach
-                                        </ol>
-                                    @endif
-                                </div>
+                                @if ($run->crash !== null)
+                                    <div class="run-section">
+                                        <span class="run-section-label">Crash</span>
+                                        <p class="crash">{{ $run->crash }}</p>
+                                    </div>
+                                @endif
 
-                                <div class="answer prose run-section">
-                                    @if ($answerHtml !== null)
-                                        {!! $answerHtml !!}
-                                    @else
-                                        <p class="muted">No answer text.</p>
-                                    @endif
-                                </div>
+                                @if ($run->judgeError !== null)
+                                    <div class="run-section">
+                                        <span class="run-section-label">Judge error</span>
+                                        <p class="crash">{{ $run->judgeError }}</p>
+                                    </div>
+                                @endif
+
+                                @if ($run->showsTranscript())
+                                    <div class="run-section">
+                                        <span class="run-section-label">Tool calls</span>
+                                        @if ($run->toolCalls === [])
+                                            <span class="muted">None</span>
+                                        @else
+                                            <ol class="tool-calls">
+                                                @foreach ($run->toolCalls as $toolCall)
+                                                    <li>
+                                                        <span class="tool-name">{{ $toolCall->name }}</span>
+                                                        @if ($toolCall->argumentList() !== '')
+                                                            <span class="tool-arguments">({{ $toolCall->argumentList() }})</span>
+                                                        @endif
+                                                        @if ($toolCall->details() !== [])
+                                                            <span class="tool-details">{{ implode(', ', $toolCall->details()) }}</span>
+                                                        @endif
+                                                    </li>
+                                                @endforeach
+                                            </ol>
+                                        @endif
+                                    </div>
+
+                                    <div class="answer prose run-section">
+                                        @if ($answerHtml !== null)
+                                            {!! $answerHtml !!}
+                                        @else
+                                            <p class="muted">No answer text.</p>
+                                        @endif
+                                    </div>
+                                @endif
 
                                 @if ($run->verdicts !== [])
                                     <div class="run-section">

@@ -91,7 +91,7 @@
         .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
         .status-passed { color: var(--passed); background: var(--passed-background); }
         .status-failed { color: var(--failed); background: var(--failed-background); }
-        .status-unknown { color: var(--muted); background: var(--surface-strong); }
+        .status-unknown, .status-unjudged { color: var(--muted); background: var(--surface-strong); }
 
         .runs { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
         .runs-count { font-weight: 600; }

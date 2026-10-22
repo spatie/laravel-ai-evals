@@ -207,7 +207,7 @@ When a test is below its minimum pass rate, it fails with a message that points 
 
 Every test writes `<results_path>/<slug>.yaml`, where the slug is `Str::slug()` of the description. A new run overwrites the file. Commit the result files, so a diff shows how a prompt or tool change moved the results.
 
-The file starts with the facts of the test: `slug`, `title`, `test_file`, `seeder`, `model`, `judge_model`, `runs`, `passed_runs`, `pass_rate`, `min_pass_rate`, `passed` and `ran_at`. Then each turn has its prompt, the checks with the result of every run, and every run with its tool calls, its answer and the verdicts. Verdicts list every judged criterion and every failed check, each with its reason. Multi-line answers are written as literal blocks, so they read like the original text.
+The file starts with the facts of the test: `slug`, `title`, `test_file`, `seeder`, `model`, `judge_model`, `runs`, `passed_runs`, `unjudged_runs` (only when there are any), `pass_rate`, `min_pass_rate`, `passed` and `ran_at`. Then each turn has its prompt, the checks with the result of every run, and every run with its tool calls, its answer and the verdicts. Verdicts list every judged criterion and every failed check, each with its reason. Multi-line answers are written as literal blocks, so they read like the original text.
 
 ```yaml
 slug: tells-a-customer-where-their-order-is
@@ -257,7 +257,9 @@ turns:
         crash: 'RuntimeException: The provider is down.'
 ```
 
-When a run throws an exception, the run fails and its entry in that turn has a `crash` instead of an answer. Later turns mark the run as `not_reached`. The other runs still count.
+When a run throws an exception, the run fails and its entry in that turn has a `crash`, together with the tool calls and answer it got before the crash. Later turns mark the run as `not_reached`. The other runs still count.
+
+When the judge itself fails, for example on a rate limit, it is not held against the agent. The turn keeps its tool calls and answer and gets a `judge_error`. A run that passed all its other checks but could not be judged is unjudged: it is left out of the pass rate and counted in `unjudged_runs`. A run that failed a check still counts as failed. When no run could be judged, the test fails. The failure message of a test lists every crash and judge error.
 
 ### Viewing results
 

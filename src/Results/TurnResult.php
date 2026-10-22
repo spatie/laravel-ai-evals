@@ -13,17 +13,28 @@ class TurnResult
         public Transcript $transcript,
         public array $outcomes,
         public ?string $judgeModel = null,
+        public ?string $judgeError = null,
     ) {}
 
     public function passed(): bool
     {
+        return $this->judgeError === null && ! $this->failed();
+    }
+
+    public function failed(): bool
+    {
         foreach ($this->outcomes as $outcome) {
             if (! $outcome->passed) {
-                return false;
+                return true;
             }
         }
 
-        return true;
+        return false;
+    }
+
+    public function unjudged(): bool
+    {
+        return $this->judgeError !== null && ! $this->failed();
     }
 
     public function outcomeFor(Expectation $expectation): ?CheckOutcome

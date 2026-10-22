@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Laravel\Ai\Approvals\PendingApproval;
+use Laravel\Ai\Responses\AgentResponse;
 use PHPUnit\Framework\AssertionFailedError;
 use Spatie\LaravelAiTests\Drivers\AgentDriver;
 use Spatie\LaravelAiTests\Judge\JudgeAgent;
@@ -205,4 +207,96 @@ it('records a crashed run and keeps counting the other runs', function () {
     ]);
 
     expect($result->get('turns')[1]['runs'][0])->toBe(['run' => 1, 'passed' => false, 'not_reached' => true]);
+});
+
+it('leaves runs the judge could not grade out of the pass rate and keeps their transcript', function () {
+    SupportAgent::fake(['Your order shipped yesterday.', 'Your order shipped yesterday.']);
+
+    $judgeCalls = 0;
+
+    JudgeAgent::fake(function () use (&$judgeCalls) {
+        if (++$judgeCalls === 1) {
+            throw new RuntimeException('The judge is rate limited.');
+        }
+
+        return ['verdicts' => [['criterion' => 1, 'reason' => 'It says when.', 'pass' => true]]];
+    });
+
+    $aiTest = makeAiTest('survives a judge error');
+
+    $aiTest
+        ->driver(new AgentDriver(SupportAgent::class))
+        ->runs(2)
+        ->minPassRate(1)
+        ->user('Where is my order?')
+        ->expectMaxWords(10)
+        ->expectRubric('Says when the order shipped.');
+
+    $aiTest->execute();
+
+    $result = resultFile('survives-a-judge-error');
+
+    expect($result->data)->toMatchArray([
+        'runs' => 2,
+        'passed_runs' => 1,
+        'unjudged_runs' => 1,
+        'pass_rate' => 1.0,
+        'passed' => true,
+    ]);
+
+    expect($result->get('turns')[0]['checks'])->toBe([
+        ['label' => 'At most 10 words', 'kind' => 'max_words', 'passed_runs' => 2, 'runs' => [1 => true, 2 => true]],
+        ['label' => 'Says when the order shipped.', 'kind' => 'rubric', 'passed_runs' => 1, 'runs' => [2 => true]],
+    ]);
+
+    expect($result->get('turns')[0]['runs'][0])->toBe([
+        'run' => 1,
+        'passed' => false,
+        'judge_error' => 'RuntimeException: The judge is rate limited.',
+        'tool_calls' => [],
+        'answer' => 'Your order shipped yesterday.',
+    ]);
+});
+
+it('fails with the judge errors when no run could be judged', function () {
+    SupportAgent::fake(['Your order shipped yesterday.']);
+
+    JudgeAgent::fake(fn () => throw new RuntimeException('The judge is rate limited.'));
+
+    $aiTest = makeAiTest('cannot be judged');
+
+    $aiTest
+        ->driver(new AgentDriver(SupportAgent::class))
+        ->runs(1)
+        ->user('Where is my order?')
+        ->expectRubric('Says when the order shipped.');
+
+    expect(fn () => $aiTest->execute())->toThrow(
+        AssertionFailedError::class,
+        'No run could be judged, because the judge failed in every run. See '.config('ai-tests.results_path')."/cannot-be-judged.yaml.\nThe judge failed on run 1, turn 1: RuntimeException: The judge is rate limited.",
+    );
+});
+
+it('fails with the crash and keeps the transcript of the crashed turn', function () {
+    SupportAgent::fake(fn () => AgentResponse::fakeWithPendingApprovals([new PendingApproval('call-1', 'cancel_order', ['order' => '1234'])]));
+
+    $aiTest = makeAiTest('keeps asking for approval');
+
+    $aiTest
+        ->seed(ShopSeeder::class)
+        ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
+        ->runs(1)
+        ->user('Cancel order 1234.');
+
+    expect(fn () => $aiTest->execute())->toThrow(
+        AssertionFailedError::class,
+        'Run 1 crashed: LogicException: The agent kept asking for approval after 5 rounds.',
+    );
+
+    expect(resultFile('keeps-asking-for-approval')->get('turns')[0]['runs'][0])->toMatchArray([
+        'crash' => 'LogicException: The agent kept asking for approval after 5 rounds.',
+        'tool_calls' => [
+            ['name' => 'cancel_order', 'arguments' => ['order' => '1234'], 'status' => 'pending', 'approval' => 'rejected'],
+        ],
+    ]);
 });

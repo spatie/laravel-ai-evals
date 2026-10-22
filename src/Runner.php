@@ -117,6 +117,7 @@ class Runner
         int $number,
     ): RunResult {
         $run = new RunResult($number);
+        $unfinishedTurn = null;
 
         DB::beginTransaction();
 
@@ -124,12 +125,17 @@ class Runner
             $driver->startConversation();
 
             foreach ($aiTest->turns as $index => $turn) {
-                $transcript = $this->converse($driver, $turn, $prompts[$index]);
+                $unfinishedTurn = new Transcript($prompts[$index]);
 
-                $run->turns[] = $this->evaluate($turn, $transcript, array_column($run->turns, 'transcript'));
+                $this->converse($driver, $turn, $unfinishedTurn);
+
+                $run->turns[] = $this->evaluate($turn, $unfinishedTurn, array_column($run->turns, 'transcript'));
+
+                $unfinishedTurn = null;
             }
         } catch (Throwable $exception) {
-            $run->crash = $exception::class.': '.$exception->getMessage();
+            $run->crash = $this->describe($exception);
+            $run->crashedTurn = $unfinishedTurn;
         } finally {
             DB::rollBack();
         }
@@ -137,11 +143,9 @@ class Runner
         return $run;
     }
 
-    protected function converse(Driver $driver, Turn $turn, string $prompt): Transcript
+    protected function converse(Driver $driver, Turn $turn, Transcript $transcript): void
     {
-        $transcript = new Transcript($prompt);
-
-        $response = $driver->prompt($prompt);
+        $response = $driver->prompt($transcript->prompt);
 
         $transcript->addResponse($response);
 
@@ -160,8 +164,6 @@ class Runner
 
             $transcript->addResponse($response);
         }
-
-        return $transcript;
     }
 
     /** @param array<int, Transcript> $earlierTurns */
@@ -172,12 +174,21 @@ class Runner
             $turn->checks,
         );
 
-        $judgeResult = $this->judge->evaluate($turn->rubric, $transcript, $earlierTurns);
+        try {
+            $judgeResult = $this->judge->evaluate($turn->rubric, $transcript, $earlierTurns);
+        } catch (Throwable $exception) {
+            return new TurnResult($transcript, $outcomes, judgeError: $this->describe($exception));
+        }
 
         return new TurnResult(
             transcript: $transcript,
             outcomes: [...$outcomes, ...$judgeResult->outcomes],
             judgeModel: $judgeResult->model,
         );
+    }
+
+    protected function describe(Throwable $exception): string
+    {
+        return $exception::class.': '.$exception->getMessage();
     }
 }
