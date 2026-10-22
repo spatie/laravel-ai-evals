@@ -85,6 +85,31 @@ class ResultFile
         ]);
     }
 
+    /** @return array<string, string> */
+    public function context(): array
+    {
+        $context = is_array($this->get('context')) ? $this->get('context') : [];
+
+        $entries = array_map(fn (mixed $value): ?string => Value::string($value), $context);
+
+        return array_filter(
+            $entries,
+            fn (?string $value, int|string $label): bool => is_string($label) && $value !== null && $value !== '',
+            ARRAY_FILTER_USE_BOTH,
+        );
+    }
+
+    public function contextLine(): ?string
+    {
+        $entries = array_map(
+            fn (string $label, string $value): string => "{$label}: {$value}",
+            array_keys($this->context()),
+            $this->context(),
+        );
+
+        return $entries !== [] ? implode(' · ', $entries) : null;
+    }
+
     public function ranAt(): ?CarbonImmutable
     {
         $ranAt = $this->get('ran_at');

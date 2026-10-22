@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Approvals\PendingApproval;
 use LogicException;
 use Spatie\LaravelAiTests\Checks\Check;
+use Spatie\LaravelAiTests\Drivers\DescribesContext;
 use Spatie\LaravelAiTests\Drivers\Driver;
 use Spatie\LaravelAiTests\Judge\Judge;
 use Spatie\LaravelAiTests\Results\RunResult;
@@ -32,6 +33,8 @@ class Runner
 
         $driver = $this->resolveDriver($aiTest);
 
+        $context = $driver instanceof DescribesContext ? $driver->context() : [];
+
         $prompts = array_map(
             fn (Turn $turn): string => $this->resolvePrompt($turn, $driver),
             $aiTest->turns,
@@ -48,6 +51,7 @@ class Runner
             runs: $runs,
             minPassRate: $aiTest->requiredPassRate(),
             ranAt: $ranAt,
+            context: $context,
         );
     }
 

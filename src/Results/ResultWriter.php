@@ -53,6 +53,7 @@ class ResultWriter
             'test_file' => Str::after($result->aiTest->testFile, base_path().DIRECTORY_SEPARATOR),
             'model' => $result->model(),
             'judge_model' => $result->judgeModel(),
+            'context' => $result->context !== [] ? $result->context : null,
             'runs' => count($result->runs),
             'passed_runs' => $result->passedRuns(),
             'unjudged_runs' => $result->unjudgedRuns() > 0 ? $result->unjudgedRuns() : null,

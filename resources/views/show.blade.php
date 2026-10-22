@@ -198,6 +198,12 @@
         @endif
 
         <dl class="facts">
+            @foreach ($result->context() as $label => $value)
+                <div>
+                    <dt>{{ $label }}</dt>
+                    <dd>{{ $value }}</dd>
+                </div>
+            @endforeach
             @foreach ($result->facts() as $label => $value)
                 <div>
                     <dt>{{ $label }}</dt>

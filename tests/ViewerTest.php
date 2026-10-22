@@ -167,3 +167,21 @@ it('reports an unreadable result file and still renders the viewer', function ()
 
     Exceptions::assertReported(ParseException::class);
 });
+
+it('shows the context of a test on the list and in the header', function () {
+    writeResultFile('scoped', [
+        'title' => 'Scoped',
+        'model' => 'gpt-5.4',
+        'context' => ['Scope' => 'All stores', 'Page' => 'Order details'],
+        'passed' => true,
+    ]);
+
+    $this->get('/ai-tests')
+        ->assertSeeInOrder(['Scoped', 'Scope: All stores · Page: Order details']);
+
+    $this->get('/ai-tests/scoped')
+        ->assertSeeInOrder(['<dt>Scope</dt>', '<dd>All stores</dd>', '<dt>Page</dt>', '<dd>Order details</dd>', '<dt>Model</dt>'], escape: false);
+
+    $this->get('/ai-tests/tells-a-customer-where-their-order-is')
+        ->assertDontSee('<dt>Scope</dt>', escape: false);
+});

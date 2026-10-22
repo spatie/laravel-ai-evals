@@ -11,6 +11,7 @@ class TestResult
     /**
      * @param  array<int, string>  $prompts
      * @param  array<int, RunResult>  $runs
+     * @param  array<string, string>  $context
      */
     public function __construct(
         public AiTest $aiTest,
@@ -18,6 +19,7 @@ class TestResult
         public array $runs,
         public float $minPassRate,
         public CarbonImmutable $ranAt,
+        public array $context = [],
     ) {}
 
     public function passedRuns(): int

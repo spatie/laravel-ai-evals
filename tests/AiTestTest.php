@@ -7,6 +7,7 @@ use Laravel\Ai\Responses\AgentResponse;
 use PHPUnit\Framework\AssertionFailedError;
 use Spatie\LaravelAiTests\Drivers\AgentDriver;
 use Spatie\LaravelAiTests\Judge\JudgeAgent;
+use Spatie\LaravelAiTests\Tests\TestSupport\ScopedShopDriver;
 use Spatie\LaravelAiTests\Tests\TestSupport\ShopDriver;
 use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
 
@@ -41,7 +42,8 @@ it('writes a result file for a passing test', function () {
             'min_pass_rate' => 0.66,
             'passed' => true,
         ])
-        ->toHaveKeys(['model', 'judge_model', 'test_file', 'ran_at']);
+        ->toHaveKeys(['model', 'judge_model', 'test_file', 'ran_at'])
+        ->not->toHaveKey('context');
 
     expect($result->get('turns'))->toBe([
         [
@@ -70,6 +72,24 @@ it('writes a result file for a passing test', function () {
             ],
         ],
     ]);
+});
+
+it('writes the context the driver describes next to the models', function () {
+    SupportAgent::fake(['Your order shipped yesterday.']);
+
+    $aiTest = makeAiTest('answers within the context of the driver');
+
+    $aiTest
+        ->driver(fn () => ScopedShopDriver::forNewCustomer())
+        ->runs(1)
+        ->user('Where is my order?');
+
+    $aiTest->execute();
+
+    $result = resultFile('answers-within-the-context-of-the-driver');
+
+    expect($result->get('context'))->toBe(['Scope' => 'All stores', 'Page' => 'Order details'])
+        ->and(array_slice(array_keys($result->data), 3, 2))->toBe(['model', 'context']);
 });
 
 it('writes multi-line answers as literal blocks', function () {

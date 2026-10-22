@@ -16,6 +16,7 @@
             .results tbody tr:has(a:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
             .results .model, .results .ran-at { color: var(--muted); font-size: 13.5px; white-space: nowrap; }
             .results .threshold { display: block; color: var(--muted); font-size: 12.5px; }
+            .results .context { display: block; margin-top: 1px; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
             .empty { padding: 32px 0; border-top: 1px solid var(--border); color: var(--muted); }
             .empty p { margin: 0 0 4px; }
             .empty strong { color: var(--text); font-weight: 600; }
@@ -74,6 +75,9 @@
                             <td><x-ai-tests::status :status="$result->status()" /></td>
                             <td class="test">
                                 <a href="{{ route('ai-tests.show', $result->slug) }}">{{ $result->title() }}</a>
+                                @if ($result->contextLine())
+                                    <span class="context">{{ $result->contextLine() }}</span>
+                                @endif
                                 @if ($result->error !== null)
                                     <span class="threshold">Unreadable result file</span>
                                 @endif

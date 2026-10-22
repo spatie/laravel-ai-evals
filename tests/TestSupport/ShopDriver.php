@@ -12,9 +12,9 @@ class ShopDriver extends AgentDriver
         parent::__construct(SupportAgent::class, as: $customer);
     }
 
-    public static function forNewCustomer(): self
+    public static function forNewCustomer(): static
     {
-        return new self(User::create([
+        return new static(User::create([
             'name' => 'Ada',
             'email' => 'ada@example.test',
             'password' => 'secret',

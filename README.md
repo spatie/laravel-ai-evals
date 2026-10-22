@@ -207,6 +207,29 @@ class ChatDriver implements Driver
 
 `decide()` receives the tool call IDs with `true` for approved and `false` for rejected calls. Return the agent response of each step, streamed or not. The package reads the text, tool calls, tool results and pending approvals from it.
 
+### Describing the context
+
+A driver can describe the context a test runs in, for example which data is in scope or which page the user is on. Implement `DescribesContext` and return labels with their values:
+
+```php
+use Spatie\LaravelAiTests\Drivers\DescribesContext;
+
+class ChatDriver implements Driver, DescribesContext
+{
+    // ...
+
+    public function context(): array
+    {
+        return [
+            'Scope' => $this->project ? $this->project->name : 'All projects',
+            'Page' => 'Error details',
+        ];
+    }
+}
+```
+
+The package reads the context once per test, after the `driver()` closure returns the driver. It is written to the result file and shown in the viewer, in the list under the test title and in the header of the result.
+
 ## Running the tests
 
 ```bash
@@ -222,7 +245,7 @@ Every test writes `<results_path>/<slug>.yaml`, where the slug is `Str::slug()` 
 
 Two AI tests whose descriptions give the same slug, even in different files, throw an error when Pest loads them, so one can't overwrite the result of the other. When you rename or delete a test, its old result file stays, because the package can't tell a removed test from one that was not part of this run, for example with `--filter`. Delete the old file by hand.
 
-The file starts with the facts of the test: `slug`, `title`, `test_file`, `model`, `judge_model`, `runs`, `passed_runs`, `unjudged_runs` (only when there are any), `pass_rate`, `min_pass_rate`, `passed` and `ran_at`. Then each turn has its prompt, the checks with the result of every run, and every run with its tool calls, its answer and the verdicts. Verdicts list every judged criterion and every failed check, each with its reason. Multi-line answers are written as literal blocks, so they read like the original text. The `status` of a tool call is `completed`, `failed`, `rejected`, `pending` when it still waits for approval, or `no_result` when no result came back for it. The judge only accepts a claimed change when its tool call completed.
+The file starts with the facts of the test: `slug`, `title`, `test_file`, `model`, `judge_model`, `context` (only when the driver describes it), `runs`, `passed_runs`, `unjudged_runs` (only when there are any), `pass_rate`, `min_pass_rate`, `passed` and `ran_at`. Then each turn has its prompt, the checks with the result of every run, and every run with its tool calls, its answer and the verdicts. Verdicts list every judged criterion and every failed check, each with its reason. Multi-line answers are written as literal blocks, so they read like the original text. The `status` of a tool call is `completed`, `failed`, `rejected`, `pending` when it still waits for approval, or `no_result` when no result came back for it. The judge only accepts a claimed change when its tool call completed.
 
 ```yaml
 slug: tells-a-customer-where-their-order-is
@@ -230,6 +253,9 @@ title: 'Tells a customer where their order is'
 test_file: tests/AiTests/OrderTest.php
 model: gpt-5.4
 judge_model: gpt-5.4
+context:
+  Scope: 'All stores'
+  Page: 'Order details'
 runs: 2
 passed_runs: 1
 pass_rate: 0.5
