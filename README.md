@@ -207,6 +207,8 @@ When a test is below its minimum pass rate, it fails with a message that points 
 
 Every test writes `<results_path>/<slug>.yaml`, where the slug is `Str::slug()` of the description. A new run overwrites the file. Commit the result files, so a diff shows how a prompt or tool change moved the results.
 
+Two AI tests whose descriptions give the same slug, even in different files, throw an error when Pest loads them, so one can't overwrite the result of the other. When you rename or delete a test, its old result file stays, because the package can't tell a removed test from one that was not part of this run, for example with `--filter`. Delete the old file by hand.
+
 The file starts with the facts of the test: `slug`, `title`, `test_file`, `seeder`, `model`, `judge_model`, `runs`, `passed_runs`, `unjudged_runs` (only when there are any), `pass_rate`, `min_pass_rate`, `passed` and `ran_at`. Then each turn has its prompt, the checks with the result of every run, and every run with its tool calls, its answer and the verdicts. Verdicts list every judged criterion and every failed check, each with its reason. Multi-line answers are written as literal blocks, so they read like the original text.
 
 ```yaml
