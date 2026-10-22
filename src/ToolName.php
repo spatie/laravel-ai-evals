@@ -2,6 +2,9 @@
 
 namespace Spatie\LaravelAiTests;
 
+use LogicException;
+use Throwable;
+
 class ToolName
 {
     public static function of(string $tool): string
@@ -14,6 +17,12 @@ class ToolName
             return class_basename($tool);
         }
 
-        return app($tool)->name();
+        try {
+            $instance = app($tool);
+        } catch (Throwable $exception) {
+            throw new LogicException("Could not create the tool {$tool} to read its name: {$exception->getMessage()}", previous: $exception);
+        }
+
+        return is_callable([$instance, 'name']) ? $instance->name() : class_basename($tool);
     }
 }

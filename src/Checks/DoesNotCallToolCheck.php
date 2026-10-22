@@ -8,13 +8,15 @@ use Spatie\LaravelAiTests\Transcript\Transcript;
 
 class DoesNotCallToolCheck extends Check
 {
+    protected ?string $toolName = null;
+
     public function __construct(
         protected string $tool,
     ) {}
 
     public function label(): string
     {
-        return 'Does not call `'.ToolName::of($this->tool).'`';
+        return 'Does not call `'.$this->toolName().'`';
     }
 
     public function kind(): string
@@ -24,7 +26,7 @@ class DoesNotCallToolCheck extends Check
 
     public function evaluate(Transcript $transcript): CheckOutcome
     {
-        $toolName = ToolName::of($this->tool);
+        $toolName = $this->toolName();
 
         $called = in_array($toolName, $transcript->toolNames(), true);
 
@@ -33,5 +35,10 @@ class DoesNotCallToolCheck extends Check
             passed: ! $called,
             reason: $called ? "Called {$toolName}." : null,
         );
+    }
+
+    protected function toolName(): string
+    {
+        return $this->toolName ??= ToolName::of($this->tool);
     }
 }

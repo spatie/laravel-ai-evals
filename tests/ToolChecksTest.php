@@ -7,9 +7,12 @@ use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
 use PHPUnit\Framework\AssertionFailedError;
 use Spatie\LaravelAiTests\Drivers\AgentDriver;
+use Spatie\LaravelAiTests\Tests\TestSupport\CancelOrderTool;
 use Spatie\LaravelAiTests\Tests\TestSupport\LookupOrderMcpTool;
 use Spatie\LaravelAiTests\Tests\TestSupport\LookupOrderTool;
+use Spatie\LaravelAiTests\Tests\TestSupport\RefundOrderTool;
 use Spatie\LaravelAiTests\Tests\TestSupport\ScriptedDriver;
+use Spatie\LaravelAiTests\Tests\TestSupport\ShippingApiTool;
 use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
 
 beforeEach(function () {
@@ -104,4 +107,47 @@ it('records whether each tool call completed, failed, was rejected or got no res
 
     expect(array_column(resultFile('looks-up-several-orders')->get('turns')[0]['runs'][0]['tool_calls'], 'status'))
         ->toBe(['completed', 'failed', 'rejected', 'no_result']);
+});
+
+it('resolves a tool class without a public name method to its class name', function (string $tool, string $name) {
+    $response = new AgentResponse('invocation-1', 'Done.', new TextUsage, new Meta);
+
+    $response->withToolCallsAndResults(
+        collect([new ToolCall('call-1', $name, ['order' => '1234'])]),
+        collect([new ToolResult('call-1', $name, ['order' => '1234'], 'Done.')]),
+    );
+
+    $aiTest = makeAiTest('calls the tool');
+
+    $aiTest
+        ->driver(new ScriptedDriver([$response]))
+        ->runs(1)
+        ->user('Handle order 1234.')
+        ->expectTools(called: [$tool]);
+
+    $aiTest->execute();
+
+    expect(resultFile('calls-the-tool')->get('turns')[0]['checks'][0])
+        ->label->toBe("Calls `{$name}`")
+        ->passed_runs->toBe(1);
+})->with([
+    'without a name method' => [CancelOrderTool::class, 'CancelOrderTool'],
+    'with a protected name method' => [RefundOrderTool::class, 'RefundOrderTool'],
+]);
+
+it('fails before the first run when a tool name cannot be resolved', function () {
+    $aiTest = makeAiTest('tracks the shipment');
+
+    $aiTest
+        ->driver(new AgentDriver(SupportAgent::class))
+        ->runs(1)
+        ->user('Where is my parcel?')
+        ->expectTools(called: [ShippingApiTool::class]);
+
+    expect(fn () => $aiTest->execute())->toThrow(
+        LogicException::class,
+        'The AI test "tracks the shipment" has a check that can\'t be set up. Could not create the tool '.ShippingApiTool::class.' to read its name',
+    );
+
+    SupportAgent::assertNeverPrompted();
 });

@@ -10,6 +10,7 @@ use PHPUnit\Framework\Assert;
 use Spatie\LaravelAiTests\Drivers\Driver;
 use Spatie\LaravelAiTests\Results\ResultWriter;
 use Spatie\LaravelAiTests\Results\TestResult;
+use Throwable;
 
 class AiTest
 {
@@ -113,6 +114,21 @@ class AiTest
 
         if ($this->requiredPassRate() < 0 || $this->requiredPassRate() > 1) {
             throw new LogicException("The minimum pass rate of the AI test \"{$this->description}\" must be between 0 and 1, but is {$this->requiredPassRate()}.");
+        }
+
+        $this->ensureChecksCanBeLabelled();
+    }
+
+    protected function ensureChecksCanBeLabelled(): void
+    {
+        foreach ($this->turns as $turn) {
+            foreach ($turn->expectations() as $expectation) {
+                try {
+                    $expectation->label();
+                } catch (Throwable $exception) {
+                    throw new LogicException("The AI test \"{$this->description}\" has a check that can't be set up. {$exception->getMessage()}", previous: $exception);
+                }
+            }
         }
     }
 
