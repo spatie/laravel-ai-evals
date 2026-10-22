@@ -4,8 +4,8 @@ namespace Spatie\LaravelAiTests\Http\Controllers;
 
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Str;
 use Spatie\LaravelAiTests\Results\ResultFile;
+use Spatie\LaravelAiTests\Viewer\ResultBody;
 
 class ShowResultController
 {
@@ -16,15 +16,12 @@ class ShowResultController
         abort_unless(File::isFile($path), 404);
 
         $result = ResultFile::fromPath($path);
-
-        $html = Str::markdown($result->body, [
-            'html_input' => 'escape',
-            'allow_unsafe_links' => false,
-        ]);
+        $turns = ResultBody::turns($result->body);
 
         return view('ai-tests::show', [
             'result' => $result,
-            'html' => $html,
+            'turns' => $turns,
+            'html' => $turns === null ? ResultBody::markdown($result->body) : null,
         ]);
     }
 }
