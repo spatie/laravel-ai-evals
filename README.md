@@ -158,7 +158,7 @@ new AgentDriver(SupportAgent::class, as: $customer);
 new AgentDriver(fn () => new SupportAgent(locale: 'nl'), as: $customer);
 ```
 
-Every run starts a new conversation. For tests with more than one turn, or with tool approvals, the agent must remember conversations, using the `RemembersConversations` trait, and you must pass `as`.
+Every run starts a new conversation. For tests with more than one turn, or with tool approvals, the agent must remember conversations, using the `RemembersConversations` trait, and you must pass `as`. When it can't remember the conversation, the second turn crashes the run with an error that says so, instead of quietly starting a new conversation.
 
 When your app talks to the agent in its own way, for example through an action that checks usage limits and adds page context, write a driver that uses that code path:
 

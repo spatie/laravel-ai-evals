@@ -167,11 +167,29 @@ it('rolls back the database after each run', function () {
         ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
         ->runs(2)
         ->user('Hi')
-        ->user('Hi again');
+        ->user('Hi again')
+        ->user('Still there?');
 
     $aiTest->execute();
 
-    expect($conversationCounts)->toBe([0, 1, 0, 1]);
+    expect($conversationCounts)->toBe([0, 1, 1, 0, 1, 1]);
+});
+
+it('crashes a follow-up turn when the agent does not remember the conversation', function () {
+    SupportAgent::fake(['Hello.', 'Hello again.']);
+
+    $aiTest = makeAiTest('forgets the first turn');
+
+    $aiTest
+        ->driver(new AgentDriver(SupportAgent::class))
+        ->runs(1)
+        ->user('Hi')
+        ->user('Hi again');
+
+    expect(fn () => $aiTest->execute())->toThrow(AssertionFailedError::class, 'does not remember the conversation');
+
+    expect(resultFile('forgets-the-first-turn')->get('turns')[1]['runs'][0]['crash'])
+        ->toStartWith('LogicException: The agent '.SupportAgent::class.' does not remember the conversation');
 });
 
 it('records a crashed run and keeps counting the other runs', function () {
@@ -188,7 +206,8 @@ it('records a crashed run and keeps counting the other runs', function () {
     $aiTest = makeAiTest('survives a crash');
 
     $aiTest
-        ->driver(new AgentDriver(SupportAgent::class))
+        ->seed(ShopSeeder::class)
+        ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
         ->runs(2)
         ->minPassRate(0.5)
         ->user('Where is my order?')
