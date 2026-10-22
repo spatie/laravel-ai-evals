@@ -8,6 +8,7 @@ use LogicException;
 use Spatie\LaravelAiTests\Checks\CallsToolCheck;
 use Spatie\LaravelAiTests\Checks\Check;
 use Spatie\LaravelAiTests\Checks\DoesNotCallToolCheck;
+use Spatie\LaravelAiTests\Checks\DoesNotMentionCheck;
 use Spatie\LaravelAiTests\Checks\Expectation;
 use Spatie\LaravelAiTests\Checks\MaxToolCallsCheck;
 use Spatie\LaravelAiTests\Checks\MaxWordsCheck;
@@ -86,6 +87,16 @@ class Turn
         $this->expectationFactories[] = fn (Closure $resolve): array => [
             new MentionsInOrderCheck($this->resolveStrings($resolve, $needles, 'expectMentionsInOrder()')),
         ];
+
+        return $this;
+    }
+
+    public function expectNotMentions(string|Closure ...$needles): static
+    {
+        $this->expectationFactories[] = fn (Closure $resolve): array => array_map(
+            fn (string $needle): Check => new DoesNotMentionCheck($needle),
+            $this->resolveStrings($resolve, $needles, 'expectNotMentions()'),
+        );
 
         return $this;
     }

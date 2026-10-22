@@ -111,10 +111,11 @@ aiTest('cancels an order after confirmation')
 | `expectMaxWords()` | Maximum number of words in the answer of the turn. |
 | `expectMentions()` | Values the answer must contain, such as an order number or a link. |
 | `expectMentionsInOrder()` | Values the answer must contain in this order. |
+| `expectNotMentions()` | Values the answer must not contain, in any letter case, such as an outdated term. |
 | `expectRubric()` | One or more criteria for the LLM judge. |
 | `approveAll()` | Approves every tool call that waits for approval in this turn. Without it, they are rejected. |
 
-Tool checks count every tool call of the turn, including the calls after an approval. A tool class is matched by its `name()`, or by its class name when it has no public `name()` method. Tool names are resolved before the first run, so a tool class the container can't build fails the test right away. Words are tokens with at least one letter or digit, so Markdown bullets do not count. A mention is a case-sensitive match anywhere in the answer of the turn. For `expectMentionsInOrder()`, the first mention of each value must come after the first mention of the value before it. Write rubric criteria as concrete, checkable statements. A vague criterion gives noisy results. The judge grades one turn at a time. For a later turn, it also gets the earlier turns of the run (their prompts, tool calls without results, and answers) as context, so a criterion can refer to "those orders", but only the current turn is graded.
+Tool checks count every tool call of the turn, including the calls after an approval. A tool class is matched by its `name()`, or by its class name when it has no public `name()` method. Tool names are resolved before the first run, so a tool class the container can't build fails the test right away. Words are tokens with at least one letter or digit, so Markdown bullets do not count. A mention is a case-sensitive match anywhere in the answer of the turn. For `expectMentionsInOrder()`, the first mention of each value must come after the first mention of the value before it. Unlike the other mention checks, `expectNotMentions()` ignores case, so `error group` also catches "Error groups", and its failure quotes the text it found. Write rubric criteria as concrete, checkable statements. A vague criterion gives noisy results. The judge grades one turn at a time. For a later turn, it also gets the earlier turns of the run (their prompts, tool calls without results, and answers) as context, so a criterion can refer to "those orders", but only the current turn is graded.
 
 ### Test data
 
@@ -165,7 +166,7 @@ Each run is wrapped in a database transaction that is rolled back afterwards, so
 
 ### Checking known values
 
-The `expectTools()`, `expectMentions()`, `expectMentionsInOrder()` and `expectRubric()` arguments can be closures too. Like a `user()` closure, they receive the driver and return the value, or an array of values. They run once per test, after the `driver()` closure and before the runs, so the result file shows the values they returned. This lets a test check the answer against the data it created, not only against what the tools returned. Say the seeder of the `ShopDriver` above also keeps its orders by a reference:
+The `expectTools()`, `expectMentions()`, `expectMentionsInOrder()`, `expectNotMentions()` and `expectRubric()` arguments can be closures too. Like a `user()` closure, they receive the driver and return the value, or an array of values. They run once per test, after the `driver()` closure and before the runs, so the result file shows the values they returned. This lets a test check the answer against the data it created, not only against what the tools returned. Say the seeder of the `ShopDriver` above also keeps its orders by a reference:
 
 ```php
 class ShopDriver extends AgentDriver
@@ -186,6 +187,15 @@ aiTest('links to a late order')
 ```
 
 Prefer a mention over a rubric criterion for exact values the agent must output, such as links to records, IDs or counts. A mention costs nothing, does not depend on the judge, and its failure names the missing value. Use a rubric criterion when the wording can vary.
+
+`expectNotMentions()` does the same for words the answer must avoid, such as a term your product no longer uses:
+
+```php
+aiTest('uses the current terminology')
+    ->driver(fn () => ShopDriver::seeded())
+    ->user('Which of my orders need attention?')
+    ->expectNotMentions('shipment group', 'parcel set');
+```
 
 ## Drivers
 
