@@ -7,7 +7,7 @@ use Laravel\Ai\Responses\AgentResponse;
 use PHPUnit\Framework\AssertionFailedError;
 use Spatie\LaravelAiTests\Drivers\AgentDriver;
 use Spatie\LaravelAiTests\Judge\JudgeAgent;
-use Spatie\LaravelAiTests\Tests\TestSupport\ShopSeeder;
+use Spatie\LaravelAiTests\Tests\TestSupport\ShopDriver;
 use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
 
 it('writes a result file for a passing test', function () {
@@ -20,8 +20,7 @@ it('writes a result file for a passing test', function () {
     $aiTest = makeAiTest('answers a question about an order');
 
     $aiTest
-        ->seed(ShopSeeder::class)
-        ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
+        ->driver(fn () => ShopDriver::forNewCustomer())
         ->runs(1)
         ->user('Where is my order?')
         ->expectMaxWords(10)
@@ -36,7 +35,6 @@ it('writes a result file for a passing test', function () {
         ->toMatchArray([
             'slug' => 'answers-a-question-about-an-order',
             'title' => 'Answers a question about an order',
-            'seeder' => 'ShopSeeder',
             'runs' => 1,
             'passed_runs' => 1,
             'pass_rate' => 1.0,
@@ -132,23 +130,21 @@ it('fails with a pointer to the result file when the pass rate is too low', func
     ]);
 });
 
-it('passes the seeder and the setUp values to later closures', function () {
+it('passes the driver to the prompt closures', function () {
     SupportAgent::fake(['Order A-1 shipped.']);
 
-    $aiTest = makeAiTest('uses seeded data in prompts');
+    $aiTest = makeAiTest('uses the driver data in prompts');
 
     $aiTest
-        ->seed(ShopSeeder::class)
-        ->setUp(fn (ShopSeeder $seeder) => ['orderNumber' => "A-{$seeder->user->id}"])
-        ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
+        ->driver(fn () => ShopDriver::forNewCustomer())
         ->runs(1)
-        ->user(fn (ShopSeeder $seeder, string $orderNumber) => "I am {$seeder->user->name}. Where is order {$orderNumber}?");
+        ->user(fn (ShopDriver $shop) => "I am {$shop->customer->name}. Where is order A-{$shop->customer->id}?");
 
     $aiTest->execute();
 
     SupportAgent::assertPrompted('I am Ada. Where is order A-1?');
 
-    expect(resultFile('uses-seeded-data-in-prompts')->get('turns')[0]['prompt'])->toBe('I am Ada. Where is order A-1?');
+    expect(resultFile('uses-the-driver-data-in-prompts')->get('turns')[0]['prompt'])->toBe('I am Ada. Where is order A-1?');
 });
 
 it('rolls back the database after each run', function () {
@@ -163,8 +159,7 @@ it('rolls back the database after each run', function () {
     $aiTest = makeAiTest('starts every run with a clean database');
 
     $aiTest
-        ->seed(ShopSeeder::class)
-        ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
+        ->driver(fn () => ShopDriver::forNewCustomer())
         ->runs(2)
         ->user('Hi')
         ->user('Hi again')
@@ -206,8 +201,7 @@ it('records a crashed run and keeps counting the other runs', function () {
     $aiTest = makeAiTest('survives a crash');
 
     $aiTest
-        ->seed(ShopSeeder::class)
-        ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
+        ->driver(fn () => ShopDriver::forNewCustomer())
         ->runs(2)
         ->minPassRate(0.5)
         ->user('Where is my order?')
@@ -302,8 +296,7 @@ it('fails with the crash and keeps the transcript of the crashed turn', function
     $aiTest = makeAiTest('keeps asking for approval');
 
     $aiTest
-        ->seed(ShopSeeder::class)
-        ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
+        ->driver(fn () => ShopDriver::forNewCustomer())
         ->runs(1)
         ->user('Cancel order 1234.');
 

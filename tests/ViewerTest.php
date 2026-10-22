@@ -4,10 +4,9 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\File;
 use Laravel\Ai\Responses\Data\ToolCall;
 use PHPUnit\Framework\AssertionFailedError;
-use Spatie\LaravelAiTests\Drivers\AgentDriver;
 use Spatie\LaravelAiTests\Judge\JudgeAgent;
 use Spatie\LaravelAiTests\Tests\TestSupport\LookupOrderTool;
-use Spatie\LaravelAiTests\Tests\TestSupport\ShopSeeder;
+use Spatie\LaravelAiTests\Tests\TestSupport\ShopDriver;
 use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
 use Symfony\Component\Yaml\Exception\ParseException;
 
@@ -31,8 +30,7 @@ beforeEach(function () {
     $aiTest = makeAiTest('tells a customer where their order is');
 
     $aiTest
-        ->seed(ShopSeeder::class)
-        ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
+        ->driver(fn () => ShopDriver::forNewCustomer())
         ->runs(2)
         ->user('Where is order <b>1234</b>?')
         ->expectTools(called: [LookupOrderTool::class])

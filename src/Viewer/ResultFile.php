@@ -81,7 +81,6 @@ class ResultFile
         return array_filter([
             'Model' => $this->text('model'),
             'Judge' => $this->text('judge_model'),
-            'Seeder' => $this->text('seeder'),
             'Test file' => $this->text('test_file'),
         ]);
     }

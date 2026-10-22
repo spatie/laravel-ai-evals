@@ -5,7 +5,7 @@ use Laravel\Ai\Responses\Data\ToolCall;
 use PHPUnit\Framework\AssertionFailedError;
 use Spatie\LaravelAiTests\Drivers\AgentDriver;
 use Spatie\LaravelAiTests\Judge\JudgeAgent;
-use Spatie\LaravelAiTests\Tests\TestSupport\ShopSeeder;
+use Spatie\LaravelAiTests\Tests\TestSupport\ShopDriver;
 use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
 
 it('matches verdicts to criteria by number', function () {
@@ -52,8 +52,7 @@ it('gives the judge the earlier turns as context without grading them', function
     $aiTest = makeAiTest('answers a follow-up question');
 
     $aiTest
-        ->seed(ShopSeeder::class)
-        ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
+        ->driver(fn () => ShopDriver::forNewCustomer())
         ->runs(1)
         ->user('Where is order 1234?')
         ->user('When does it arrive?')

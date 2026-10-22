@@ -47,13 +47,10 @@ class ResultWriter
     /** @return array<string, mixed> */
     protected function data(TestResult $result): array
     {
-        $seederClass = $result->aiTest->seederClass;
-
         $facts = Arr::whereNotNull([
             'slug' => $result->aiTest->slug(),
             'title' => $result->aiTest->title(),
             'test_file' => Str::after($result->aiTest->testFile, base_path().DIRECTORY_SEPARATOR),
-            'seeder' => $seederClass !== null ? class_basename($seederClass) : null,
             'model' => $result->model(),
             'judge_model' => $result->judgeModel(),
             'runs' => count($result->runs),

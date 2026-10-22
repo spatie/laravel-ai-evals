@@ -3,7 +3,6 @@
 namespace Spatie\LaravelAiTests;
 
 use Closure;
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 use LogicException;
 use PHPUnit\Framework\Assert;
@@ -14,11 +13,6 @@ use Throwable;
 
 class AiTest
 {
-    /** @var class-string<Seeder>|null */
-    public ?string $seederClass = null;
-
-    public ?Closure $setUp = null;
-
     public Closure|Driver|null $driver = null;
 
     public ?int $runs = null;
@@ -32,21 +26,6 @@ class AiTest
         public string $description,
         public string $testFile,
     ) {}
-
-    /** @param class-string<Seeder> $seederClass */
-    public function seed(string $seederClass): static
-    {
-        $this->seederClass = $seederClass;
-
-        return $this;
-    }
-
-    public function setUp(Closure $setUp): static
-    {
-        $this->setUp = $setUp;
-
-        return $this;
-    }
 
     public function driver(Closure|Driver $driver): static
     {

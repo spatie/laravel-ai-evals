@@ -3,8 +3,7 @@
 use Laravel\Ai\Approvals\PendingApproval;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
-use Spatie\LaravelAiTests\Drivers\AgentDriver;
-use Spatie\LaravelAiTests\Tests\TestSupport\ShopSeeder;
+use Spatie\LaravelAiTests\Tests\TestSupport\ShopDriver;
 use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
 
 beforeEach(function () {
@@ -18,8 +17,7 @@ it('rejects pending tool calls by default', function () {
     $aiTest = makeAiTest('asks before cancelling');
 
     $aiTest
-        ->seed(ShopSeeder::class)
-        ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
+        ->driver(fn () => ShopDriver::forNewCustomer())
         ->runs(1)
         ->user('Cancel order 1234.');
 
@@ -36,8 +34,7 @@ it('approves pending tool calls with approveAll', function () {
     $aiTest = makeAiTest('cancels after approval');
 
     $aiTest
-        ->seed(ShopSeeder::class)
-        ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
+        ->driver(fn () => ShopDriver::forNewCustomer())
         ->runs(1)
         ->user('Cancel order 1234.')
         ->approveAll();

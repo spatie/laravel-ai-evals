@@ -4,7 +4,6 @@ namespace Spatie\LaravelAiTests;
 
 use Carbon\CarbonImmutable;
 use Closure;
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Approvals\PendingApproval;
 use LogicException;
@@ -31,14 +30,12 @@ class Runner
 
         $ranAt = CarbonImmutable::now();
 
-        $parameters = $this->prepare($aiTest);
+        $driver = $this->resolveDriver($aiTest);
 
         $prompts = array_map(
-            fn (Turn $turn): string => $turn->prompt instanceof Closure ? app()->call($turn->prompt, $parameters) : $turn->prompt,
+            fn (Turn $turn): string => $this->resolvePrompt($turn, $driver),
             $aiTest->turns,
         );
-
-        $driver = $this->resolveDriver($aiTest, $parameters);
 
         $runs = array_map(
             fn (int $number): RunResult => $this->runOnce($aiTest, $driver, $prompts, $number),
@@ -54,52 +51,10 @@ class Runner
         );
     }
 
-    protected function seed(AiTest $aiTest): ?Seeder
-    {
-        if ($aiTest->seederClass === null) {
-            return null;
-        }
-
-        $seeder = app($aiTest->seederClass);
-
-        $seeder->setContainer(app())->__invoke();
-
-        return $seeder;
-    }
-
-    /** @return array<string, mixed> */
-    protected function prepare(AiTest $aiTest): array
-    {
-        $seeder = $this->seed($aiTest);
-
-        $parameters = $seeder === null ? [] : [$seeder::class => $seeder, 'seeder' => $seeder];
-
-        if ($aiTest->setUp === null) {
-            return $parameters;
-        }
-
-        return [...$parameters, ...$this->setUpParameters(app()->call($aiTest->setUp, $parameters))];
-    }
-
-    /** @return array<string, mixed> */
-    protected function setUpParameters(mixed $setUpResult): array
-    {
-        if (is_object($setUpResult)) {
-            return [$setUpResult::class => $setUpResult];
-        }
-
-        if (! is_array($setUpResult)) {
-            return [];
-        }
-
-        return array_filter($setUpResult, fn (int|string $key): bool => is_string($key), ARRAY_FILTER_USE_KEY);
-    }
-
-    /** @param array<string, mixed> $parameters */
-    protected function resolveDriver(AiTest $aiTest, array $parameters): Driver
+    protected function resolveDriver(AiTest $aiTest): Driver
     {
         $driver = $aiTest->driver instanceof Closure
-            ? app()->call($aiTest->driver, $parameters)
+            ? app()->call($aiTest->driver)
             : $aiTest->driver;
 
         if (! $driver instanceof Driver) {
@@ -107,6 +62,15 @@ class Runner
         }
 
         return $driver;
+    }
+
+    protected function resolvePrompt(Turn $turn, Driver $driver): string
+    {
+        if (! $turn->prompt instanceof Closure) {
+            return $turn->prompt;
+        }
+
+        return app()->call($turn->prompt, [$driver::class => $driver, 'driver' => $driver]);
     }
 
     /** @param array<int, string> $prompts */

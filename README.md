@@ -8,8 +8,7 @@ Unit tests with faked responses tell you that your code works. They don't tell y
 
 ```php
 aiTest('tells a customer where their order is')
-    ->setUp(fn () => ['customer' => Customer::factory()->hasOrders(1)->create()])
-    ->driver(fn (Customer $customer) => new AgentDriver(SupportAgent::class, as: $customer))
+    ->driver(fn () => new AgentDriver(SupportAgent::class, as: Customer::factory()->hasOrders(1)->create()))
     ->user('Where is my order?')
     ->expectTools(called: [LookupOrderTool::class], maxCalls: 3)
     ->expectMaxWords(80)
@@ -80,18 +79,16 @@ use App\Models\Order;
 use Spatie\LaravelAiTests\Drivers\AgentDriver;
 
 aiTest('cancels an order after confirmation')
-    ->setUp(function () {
+    ->driver(function () {
         $customer = Customer::factory()->create();
 
-        return [
-            'customer' => $customer,
-            'order' => Order::factory()->for($customer)->create(['number' => 'A-1001']),
-        ];
+        Order::factory()->for($customer)->create(['number' => 'A-1001']);
+
+        return new AgentDriver(SupportAgent::class, as: $customer);
     })
-    ->driver(fn (Customer $customer) => new AgentDriver(SupportAgent::class, as: $customer))
     ->runs(3)
     ->minPassRate(0.66)
-    ->user(fn (Order $order) => "Please cancel order {$order->number}.")
+    ->user('Please cancel order A-1001.')
     ->expectTools(called: [LookupOrderTool::class], notCalled: [CancelOrderTool::class])
     ->expectRubric('Asks the customer to confirm before cancelling.')
     ->user('Yes, cancel it.')
@@ -106,12 +103,10 @@ aiTest('cancels an order after confirmation')
 
 | Method | Behaviour |
 | --- | --- |
-| `setUp()` | Builds the data for this test, usually with factories. Runs once per test. |
-| `seed()` | Runs a database seeder once per test, like `$this->seed()`. |
-| `driver()` | How the turns reach your agent. Pass a driver or a closure that returns one. |
+| `driver()` | How the turns reach your agent. Pass a driver, or a closure that sets up the test data and returns one. |
 | `runs()` | Number of fresh conversations. Defaults to `ai-tests.runs`. |
 | `minPassRate()` | Minimum share of passing runs. Defaults to `ai-tests.min_pass_rate`. |
-| `user()` | Starts a turn with this message. Pass a closure when the message depends on the test data. |
+| `user()` | Starts a turn with this message. Pass a closure that receives the driver when the message depends on the test data. |
 | `expectTools()` | Tool classes or tool names that must or must not be called, and a maximum number of calls. |
 | `expectMaxWords()` | Maximum number of words in the answer of the turn. |
 | `expectRubric()` | One or more criteria for the LLM judge. |
@@ -121,32 +116,50 @@ Tool checks count every tool call of the turn, including the calls after an appr
 
 ### Test data
 
-Use `setUp()` with factories for data that belongs to one test. Its return value is passed to the closures of `driver()` and `user()`:
+Set up the test data in the `driver()` closure, with factories, a seeder, or anything else, and return the driver. The closure runs once per test, before the runs. A `user()` closure receives the driver, by its class or as `$driver`, so a driver that keeps what was created can pass it to the prompts.
 
-- Return an array to pass each value by its key: `fn (Order $order)` receives `$data['order']`.
-- Return an object to pass it by its class.
-
-Use a seeder when the setup is large or shared between many tests. `seed()` runs it once per test and keeps the instance, so the seeder can expose what it created as public properties. Closures receive it by its class or as `$seeder`. When you use both, `setUp()` runs after the seeder and can receive it too.
+For data that is large or shared between many tests, give your driver a named constructor that runs a seeder and keeps it:
 
 ```php
 class ShopSeeder extends Seeder
 {
     public Customer $customer;
 
+    public Order $order;
+
     public function run(): void
     {
         $this->customer = Customer::factory()->hasOrders(25)->create();
+
+        $this->order = $this->customer->orders->first();
     }
 }
 
-aiTest('summarizes the order history')
-    ->seed(ShopSeeder::class)
-    ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->customer))
-    ->user('What did I order this year?')
-    ->expectRubric('Mentions the number of orders.');
+class ShopDriver extends AgentDriver
+{
+    public function __construct(
+        public readonly ShopSeeder $seeder,
+    ) {
+        parent::__construct(SupportAgent::class, as: $seeder->customer);
+    }
+
+    public static function seeded(): self
+    {
+        $seeder = app(ShopSeeder::class);
+
+        $seeder->setContainer(app())->__invoke();
+
+        return new self($seeder);
+    }
+}
+
+aiTest('summarizes an order')
+    ->driver(fn () => ShopDriver::seeded())
+    ->user(fn (ShopDriver $driver) => "What is in order {$driver->seeder->order->number}?")
+    ->expectRubric('Lists the products of the order.');
 ```
 
-Each run is wrapped in a database transaction that is rolled back afterwards, so changes made by one run do not leak into the next. The data from `setUp()` and `seed()` is created once, before the runs.
+Each run is wrapped in a database transaction that is rolled back afterwards, so changes made by one run do not leak into the next. The data from the `driver()` closure is created once, before the runs.
 
 ## Drivers
 
@@ -209,7 +222,7 @@ Every test writes `<results_path>/<slug>.yaml`, where the slug is `Str::slug()` 
 
 Two AI tests whose descriptions give the same slug, even in different files, throw an error when Pest loads them, so one can't overwrite the result of the other. When you rename or delete a test, its old result file stays, because the package can't tell a removed test from one that was not part of this run, for example with `--filter`. Delete the old file by hand.
 
-The file starts with the facts of the test: `slug`, `title`, `test_file`, `seeder`, `model`, `judge_model`, `runs`, `passed_runs`, `unjudged_runs` (only when there are any), `pass_rate`, `min_pass_rate`, `passed` and `ran_at`. Then each turn has its prompt, the checks with the result of every run, and every run with its tool calls, its answer and the verdicts. Verdicts list every judged criterion and every failed check, each with its reason. Multi-line answers are written as literal blocks, so they read like the original text. The `status` of a tool call is `completed`, `failed`, `rejected`, `pending` when it still waits for approval, or `no_result` when no result came back for it. The judge only accepts a claimed change when its tool call completed.
+The file starts with the facts of the test: `slug`, `title`, `test_file`, `model`, `judge_model`, `runs`, `passed_runs`, `unjudged_runs` (only when there are any), `pass_rate`, `min_pass_rate`, `passed` and `ran_at`. Then each turn has its prompt, the checks with the result of every run, and every run with its tool calls, its answer and the verdicts. Verdicts list every judged criterion and every failed check, each with its reason. Multi-line answers are written as literal blocks, so they read like the original text. The `status` of a tool call is `completed`, `failed`, `rejected`, `pending` when it still waits for approval, or `no_result` when no result came back for it. The judge only accepts a claimed change when its tool call completed.
 
 ```yaml
 slug: tells-a-customer-where-their-order-is
