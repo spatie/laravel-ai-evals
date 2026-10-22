@@ -18,6 +18,21 @@ aiTest('tells a customer where their order is')
 
 A test passes when enough of its runs pass. A run passes when all deterministic checks pass and an LLM judge accepts every rubric criterion.
 
+## What these tests are for
+
+These tests check your agent, not the model. They cover the parts you own: the tools, their descriptions and the data they return, the context you pass, and the format and behaviour your system prompt pushes the model towards. They do not measure what the model knows or how well it reasons.
+
+A good rule of thumb: every check and rubric line should point at something you own and could change to fix a failure. If nothing you own could fix it, drop the line.
+
+```php
+// Tests the model's reasoning. When it fails, there is nothing you can change.
+->expectRubric('Explains why the property is null at line 14.')
+
+// Tests your agent. When it fails, you fix the tool, its description or the prompt.
+->expectTools(called: [GetErrorDetailsTool::class])
+->expectRubric('Bases its explanation on the stack frame that the error details tool returned.')
+```
+
 ## Support us
 
 [<img src="https://github-ads.s3.eu-central-1.amazonaws.com/laravel-ai-tests.jpg?t=1" width="419px" />](https://spatie.be/github-ad-click/laravel-ai-tests)
