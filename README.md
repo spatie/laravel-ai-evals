@@ -117,7 +117,7 @@ aiTest('cancels an order after confirmation')
 | `expectRubric()` | One or more criteria for the LLM judge. |
 | `approveAll()` | Approves every tool call that waits for approval in this turn. Without it, they are rejected. |
 
-Tool checks count every tool call of the turn, including the calls after an approval. Words are tokens with at least one letter or digit, so Markdown bullets do not count. Write rubric criteria as concrete, checkable statements. A vague criterion gives noisy results.
+Tool checks count every tool call of the turn, including the calls after an approval. Words are tokens with at least one letter or digit, so Markdown bullets do not count. Write rubric criteria as concrete, checkable statements. A vague criterion gives noisy results. The judge grades one turn at a time. For a later turn, it also gets the earlier turns of the run (their prompts, tool calls without results, and answers) as context, so a criterion can refer to "those orders", but only the current turn is graded.
 
 ### Test data
 

@@ -12,8 +12,11 @@ use Spatie\LaravelAiTests\Transcript\Transcript;
 
 class Judge
 {
-    /** @param array<int, RubricCriterion> $rubric */
-    public function evaluate(array $rubric, Transcript $transcript): JudgeResult
+    /**
+     * @param  array<int, RubricCriterion>  $rubric
+     * @param  array<int, Transcript>  $earlierTurns
+     */
+    public function evaluate(array $rubric, Transcript $transcript, array $earlierTurns = []): JudgeResult
     {
         if ($rubric === []) {
             return new JudgeResult([]);
@@ -22,7 +25,7 @@ class Judge
         $agent = $this->agent();
 
         $response = $agent->prompt(
-            "# Transcript\n\n{$this->transcript($transcript)}\n\n# Criteria\n\n{$this->numberedCriteria($rubric)}",
+            $this->prompt($rubric, $transcript, $earlierTurns),
             provider: config('ai-tests.judge.provider'),
             model: config('ai-tests.judge.model'),
         );
@@ -47,6 +50,46 @@ class Judge
         return app(config('ai-tests.judge.agent'));
     }
 
+    /**
+     * @param  array<int, RubricCriterion>  $rubric
+     * @param  array<int, Transcript>  $earlierTurns
+     */
+    protected function prompt(array $rubric, Transcript $transcript, array $earlierTurns): string
+    {
+        $sections = [];
+
+        if ($earlierTurns !== []) {
+            $sections[] = "# Earlier turns\n\nContext only. Do not grade these turns.";
+
+            foreach (array_values($earlierTurns) as $index => $earlierTurn) {
+                $sections[] = '## Turn '.($index + 1)."\n\n{$this->earlierTurn($earlierTurn)}";
+            }
+        }
+
+        $sections[] = "# Turn to grade\n\n{$this->transcript($transcript)}";
+        $sections[] = "# Criteria\n\n{$this->numberedCriteria($rubric)}";
+
+        return implode("\n\n", $sections);
+    }
+
+    protected function earlierTurn(Transcript $transcript): string
+    {
+        $lines = ["User: {$transcript->prompt}", ''];
+
+        foreach ($transcript->toolCalls as $toolCall) {
+            $lines[] = $this->toolCallSummary($toolCall);
+        }
+
+        if ($transcript->toolCalls !== []) {
+            $lines[] = '';
+        }
+
+        $lines[] = 'Assistant answer:';
+        $lines[] = $transcript->answer() !== '' ? $transcript->answer() : '(no text)';
+
+        return implode("\n", $lines);
+    }
+
     protected function transcript(Transcript $transcript): string
     {
         $lines = ["User: {$transcript->prompt}", ''];
@@ -64,13 +107,18 @@ class Judge
 
     protected function toolCall(ToolCallRecord $toolCall): string
     {
+        return implode("\n", [
+            $this->toolCallSummary($toolCall),
+            'Result: '.($toolCall->result ?? '(none)'),
+        ]);
+    }
+
+    protected function toolCallSummary(ToolCallRecord $toolCall): string
+    {
         $arguments = json_encode($toolCall->arguments, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $decision = $toolCall->decisionLabel() !== null ? ", user {$toolCall->decisionLabel()} it" : '';
 
-        return implode("\n", [
-            "Tool call `{$toolCall->name}` {$arguments} ({$toolCall->status->value}{$decision})",
-            'Result: '.($toolCall->result ?? '(none)'),
-        ]);
+        return "Tool call `{$toolCall->name}` {$arguments} ({$toolCall->status->value}{$decision})";
     }
 
     /** @param array<int, RubricCriterion> $rubric */

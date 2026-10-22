@@ -1,13 +1,16 @@
 <?php
 
 use Laravel\Ai\Prompts\AgentPrompt;
-use Spatie\LaravelAiTests\Checks\RubricCriterion;
-use Spatie\LaravelAiTests\Judge\Judge;
+use Laravel\Ai\Responses\Data\ToolCall;
+use PHPUnit\Framework\AssertionFailedError;
+use Spatie\LaravelAiTests\Drivers\AgentDriver;
 use Spatie\LaravelAiTests\Judge\JudgeAgent;
-use Spatie\LaravelAiTests\Results\CheckOutcome;
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiTests\Tests\TestSupport\ShopSeeder;
+use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
 
 it('matches verdicts to criteria by number', function () {
+    SupportAgent::fake(['Order 1234 shipped.']);
+
     JudgeAgent::fake([
         ['verdicts' => [
             ['criterion' => 2, 'reason' => 'It is rude.', 'pass' => false],
@@ -15,29 +18,68 @@ it('matches verdicts to criteria by number', function () {
         ]],
     ]);
 
-    $transcript = new Transcript('Where is my order?');
-    $transcript->texts[] = 'Order 1234 shipped.';
+    $aiTest = makeAiTest('names the order');
 
-    $rubric = array_map(fn (string $criterion) => new RubricCriterion($criterion), ['Names the order.', 'Is polite.', 'Gives a date.']);
+    $aiTest
+        ->driver(new AgentDriver(SupportAgent::class))
+        ->runs(1)
+        ->user('Where is my order?')
+        ->expectRubric('Names the order.', 'Is polite.', 'Gives a date.');
 
-    $result = app(Judge::class)->evaluate($rubric, $transcript);
+    expect(fn () => $aiTest->execute())->toThrow(AssertionFailedError::class);
 
-    expect(array_map(fn (CheckOutcome $outcome) => [$outcome->label(), $outcome->passed, $outcome->reason], $result->outcomes))->toBe([
-        ['Names the order.', true, 'It names the order.'],
-        ['Is polite.', false, 'It is rude.'],
-        ['Gives a date.', false, 'The judge returned no verdict.'],
+    expect(resultFile('names-the-order')->get('turns')[0]['runs'][0]['verdicts'])->toBe([
+        ['check' => 'Names the order.', 'passed' => true, 'reason' => 'It names the order.'],
+        ['check' => 'Is polite.', 'passed' => false, 'reason' => 'It is rude.'],
+        ['check' => 'Gives a date.', 'passed' => false, 'reason' => 'The judge returned no verdict.'],
     ]);
 
     JudgeAgent::assertPrompted(fn (AgentPrompt $prompt) => str_contains($prompt->prompt, "Assistant answer:\nOrder 1234 shipped.")
         && str_contains($prompt->prompt, "1. Names the order.\n2. Is polite.\n3. Gives a date."));
 });
 
-it('does not call the judge without a rubric', function () {
-    JudgeAgent::fake();
+it('gives the judge the earlier turns as context without grading them', function () {
+    SupportAgent::fake([
+        new ToolCall('call-1', 'lookup_order', ['order' => '1234']),
+        'Order 1234 shipped yesterday.',
+        'It arrives tomorrow.',
+    ]);
 
-    $result = app(Judge::class)->evaluate([], new Transcript('Hi'));
+    JudgeAgent::fake([
+        ['verdicts' => [['criterion' => 1, 'reason' => 'It gives a date.', 'pass' => true]]],
+    ]);
 
-    expect($result->outcomes)->toBe([]);
+    $aiTest = makeAiTest('answers a follow-up question');
 
-    JudgeAgent::assertNeverPrompted();
+    $aiTest
+        ->seed(ShopSeeder::class)
+        ->driver(fn (ShopSeeder $seeder) => new AgentDriver(SupportAgent::class, as: $seeder->user))
+        ->runs(1)
+        ->user('Where is order 1234?')
+        ->user('When does it arrive?')
+        ->expectRubric('Gives a delivery date.');
+
+    $aiTest->execute();
+
+    JudgeAgent::assertPrompted(fn (AgentPrompt $prompt) => str_contains($prompt->prompt, implode("\n", [
+        '# Earlier turns',
+        '',
+        'Context only. Do not grade these turns.',
+        '',
+        '## Turn 1',
+        '',
+        'User: Where is order 1234?',
+        '',
+        'Tool call `lookup_order` {"order":"1234"} (completed)',
+        '',
+        'Assistant answer:',
+        'Order 1234 shipped yesterday.',
+        '',
+        '# Turn to grade',
+        '',
+        'User: When does it arrive?',
+        '',
+        'Assistant answer:',
+        'It arrives tomorrow.',
+    ])));
 });

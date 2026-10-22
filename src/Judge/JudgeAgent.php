@@ -15,9 +15,11 @@ class JudgeAgent implements Agent, HasStructuredOutput
     public function instructions(): string
     {
         return <<<'PROMPT'
-        You grade one turn of a conversation between a user and an AI assistant.
+        You grade the last turn of a conversation between a user and an AI assistant.
 
-        You get the user's message, every tool call the assistant made in this turn with its arguments, status and a truncated result, and the assistant's answer. Then you get numbered criteria.
+        You may first get the earlier turns of the conversation: each user message, the tool calls the assistant made without their results, and the assistant's answer. They are context only, for example to know what "those three errors" refers to. Do not grade the earlier turns, and do not count their tool calls as calls made in the turn you grade.
+
+        Then you get the turn to grade: the user's message, every tool call the assistant made in this turn with its arguments, status and a truncated result, and the assistant's answer. Then you get numbered criteria.
 
         Judge each criterion on its own, strictly and literally. A criterion passes only when the transcript clearly satisfies it. Treat the tool calls and results as the ground truth: when the answer claims an action or a fact, check it against them. A claimed change only counts when the matching tool call completed. Long tool results are truncated and end with "...": a fact missing from a truncated result is not evidence that the answer invented it. Do not reward effort or partial answers.
 

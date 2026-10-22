@@ -126,7 +126,7 @@ class Runner
             foreach ($aiTest->turns as $index => $turn) {
                 $transcript = $this->converse($driver, $turn, $prompts[$index]);
 
-                $run->turns[] = $this->evaluate($turn, $transcript);
+                $run->turns[] = $this->evaluate($turn, $transcript, array_column($run->turns, 'transcript'));
             }
         } catch (Throwable $exception) {
             $run->crash = $exception::class.': '.$exception->getMessage();
@@ -164,14 +164,15 @@ class Runner
         return $transcript;
     }
 
-    protected function evaluate(Turn $turn, Transcript $transcript): TurnResult
+    /** @param array<int, Transcript> $earlierTurns */
+    protected function evaluate(Turn $turn, Transcript $transcript, array $earlierTurns): TurnResult
     {
         $outcomes = array_map(
             fn (Check $check) => $check->evaluate($transcript),
             $turn->checks,
         );
 
-        $judgeResult = $this->judge->evaluate($turn->rubric, $transcript);
+        $judgeResult = $this->judge->evaluate($turn->rubric, $transcript, $earlierTurns);
 
         return new TurnResult(
             transcript: $transcript,
