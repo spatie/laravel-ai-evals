@@ -32,6 +32,17 @@ class TurnSection
         ));
     }
 
+    public function checksStatus(): string
+    {
+        $statuses = array_map(fn (CheckRow $check): string => $check->status(), $this->checks);
+
+        return match (true) {
+            in_array('failed', $statuses, true) => 'failed',
+            in_array('partial', $statuses, true) => 'partial',
+            default => 'passed',
+        };
+    }
+
     public function hasExample(): bool
     {
         return $this->exampleLabel !== null;

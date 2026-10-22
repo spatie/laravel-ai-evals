@@ -2,6 +2,7 @@
     $failedCount = $results->filter(fn ($result) => $result->status() === 'failed')->count();
     $passedCount = $results->filter(fn ($result) => $result->status() === 'passed')->count();
     $lastRun = $results->map(fn ($result) => $result->ranAt())->filter()->max();
+    $usualMinPassRate = $results->map(fn ($result) => $result->percentage('min_pass_rate'))->filter()->countBy()->sortDesc()->keys()->first();
 @endphp
 
 <x-ai-tests::layout title="AI test results">
@@ -24,6 +25,7 @@
             .results .threshold { display: block; color: var(--muted); font-size: 12.5px; }
             .empty { padding: 32px 0; border-top: 1px solid var(--border); color: var(--muted); }
             .empty p { margin: 0 0 4px; }
+            .empty strong { color: var(--text); font-weight: 600; }
             @media (max-width: 720px) {
                 .results .column-model, .results .column-ran-at { display: none; }
             }
@@ -46,6 +48,9 @@
                 @endif
                 <strong class="is-passed">{{ $passedCount }} passing</strong>
                 <span>{{ $results->count() }} {{ str('test')->plural($results->count()) }}</span>
+                @if ($usualMinPassRate)
+                    <span>Min pass rate {{ $usualMinPassRate }}</span>
+                @endif
                 @if ($lastRun)
                     <span>Last run <x-ai-tests::time :value="$lastRun" /></span>
                 @endif
@@ -55,7 +60,7 @@
 
     @if ($results->isEmpty())
         <div class="empty">
-            <p>No results yet.</p>
+            <p><strong>No results yet.</strong></p>
             <p>Run your AI tests and their results will show up here. Results are read from <code>{{ $resultsPath }}</code>.</p>
         </div>
     @else
@@ -77,7 +82,7 @@
                             <td class="test"><a href="{{ route('ai-tests.show', $result->slug) }}">{{ $result->title() }}</a></td>
                             <td>
                                 <x-ai-tests::runs :passed="$result->get('passed_runs')" :runs="$result->get('runs')" />
-                                @if ($result->percentage('min_pass_rate'))
+                                @if ($result->percentage('min_pass_rate') && $result->percentage('min_pass_rate') !== $usualMinPassRate)
                                     <span class="threshold numeric">min {{ $result->percentage('min_pass_rate') }}</span>
                                 @endif
                             </td>

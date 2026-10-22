@@ -25,6 +25,8 @@
             .turn + .turn { margin-top: 16px; border-top: 1px solid var(--border); }
             .turn-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 14px; }
             .turn-summary { color: var(--muted); font-size: 13.5px; }
+            .turn-summary-partial { color: var(--partial); font-weight: 600; }
+            .turn-summary-failed { color: var(--failed); font-weight: 600; }
             .turn-block { margin-top: 28px; }
             .turn-block > h3 { margin-bottom: 10px; }
 
@@ -77,8 +79,9 @@
 
         <p class="verdict">
             <x-ai-tests::status :status="$result->status()" />
-            <x-ai-tests::runs :passed="$result->get('passed_runs')" :runs="$result->get('runs')" />
-            <span class="verdict-runs">{{ $result->get('passed_runs') }} of {{ $result->get('runs') }} runs passed</span>
+            @if (is_numeric($result->get('passed_runs')) && is_numeric($result->get('runs')))
+                <span class="verdict-runs">{{ $result->get('passed_runs') }} of {{ $result->get('runs') }} runs passed</span>
+            @endif
             @if ($result->percentage('min_pass_rate'))
                 <span class="muted numeric">min {{ $result->percentage('min_pass_rate') }}</span>
             @endif
@@ -91,10 +94,12 @@
                     <dd @class(['is-path' => $label === 'Test file'])>{{ $value }}</dd>
                 </div>
             @endforeach
-            <div>
-                <dt>Ran at</dt>
-                <dd><x-ai-tests::time :value="$result->ranAt()" /></dd>
-            </div>
+            @if ($result->ranAt())
+                <div>
+                    <dt>Ran at</dt>
+                    <dd><x-ai-tests::time :value="$result->ranAt()" /></dd>
+                </div>
+            @endif
         </dl>
     </header>
 
@@ -106,7 +111,7 @@
                 <div class="turn-header">
                     <h2 id="turn-{{ $turn->number }}-heading">Turn {{ $turn->number }}</h2>
                     @if ($turn->checks !== [])
-                        <span class="turn-summary numeric">{{ count($turn->checks) - $turn->failingChecks() }} of {{ count($turn->checks) }} checks passed in every run</span>
+                        <span @class(['turn-summary', 'numeric', 'turn-summary-'.$turn->checksStatus()])>{{ count($turn->checks) - $turn->failingChecks() }} of {{ count($turn->checks) }} checks passed in every run</span>
                     @endif
                 </div>
 
