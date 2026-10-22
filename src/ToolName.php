@@ -2,14 +2,18 @@
 
 namespace Spatie\LaravelAiTests;
 
-use Laravel\Ai\Tools\ToolNameResolver;
-
 class ToolName
 {
     public static function of(string $tool): string
     {
-        return class_exists($tool)
-            ? ToolNameResolver::resolve(app($tool))
-            : $tool;
+        if (! class_exists($tool)) {
+            return $tool;
+        }
+
+        if (! method_exists($tool, 'name')) {
+            return class_basename($tool);
+        }
+
+        return app($tool)->name();
     }
 }
