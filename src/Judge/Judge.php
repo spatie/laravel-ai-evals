@@ -6,6 +6,7 @@ use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use LogicException;
 use Spatie\LaravelAiTests\Results\CheckOutcome;
+use Spatie\LaravelAiTests\Transcript\ToolCallRecord;
 use Spatie\LaravelAiTests\Transcript\Transcript;
 
 class Judge
@@ -20,7 +21,7 @@ class Judge
         $agent = $this->agent();
 
         $response = $agent->prompt(
-            "# Transcript\n\n{$transcript->forJudge()}\n\n# Criteria\n\n{$this->numberedCriteria($rubric)}",
+            "# Transcript\n\n{$this->transcript($transcript)}\n\n# Criteria\n\n{$this->numberedCriteria($rubric)}",
             provider: config('ai-tests.judge.provider'),
             model: config('ai-tests.judge.model'),
         );
@@ -43,6 +44,32 @@ class Judge
     protected function agent(): Agent
     {
         return app(config('ai-tests.judge.agent'));
+    }
+
+    protected function transcript(Transcript $transcript): string
+    {
+        $lines = ["User: {$transcript->prompt}", ''];
+
+        foreach ($transcript->toolCalls as $toolCall) {
+            $lines[] = $this->toolCall($toolCall);
+            $lines[] = '';
+        }
+
+        $lines[] = 'Assistant answer:';
+        $lines[] = $transcript->answer() !== '' ? $transcript->answer() : '(no text)';
+
+        return implode("\n", $lines);
+    }
+
+    protected function toolCall(ToolCallRecord $toolCall): string
+    {
+        $arguments = json_encode($toolCall->arguments, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $decision = $toolCall->decisionLabel() !== null ? ", user {$toolCall->decisionLabel()} it" : '';
+
+        return implode("\n", [
+            "Tool call `{$toolCall->name}` {$arguments} ({$toolCall->status->value}{$decision})",
+            'Result: '.($toolCall->result ?? '(none)'),
+        ]);
     }
 
     /** @param array<int, string> $rubric */

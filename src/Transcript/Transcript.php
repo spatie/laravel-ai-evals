@@ -72,32 +72,6 @@ class Transcript
             ->count();
     }
 
-    public function forJudge(): string
-    {
-        $lines = ["User: {$this->prompt}", ''];
-
-        foreach ($this->toolCalls as $toolCall) {
-            $lines[] = $this->toolCallForJudge($toolCall);
-            $lines[] = '';
-        }
-
-        $lines[] = 'Assistant answer:';
-        $lines[] = $this->answer() !== '' ? $this->answer() : '(no text)';
-
-        return implode("\n", $lines);
-    }
-
-    protected function toolCallForJudge(ToolCallRecord $toolCall): string
-    {
-        $arguments = json_encode($toolCall->arguments, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $decision = $toolCall->decisionLabel() !== null ? ", user {$toolCall->decisionLabel()} it" : '';
-
-        return implode("\n", [
-            "Tool call `{$toolCall->name}` {$arguments} ({$toolCall->status->value}{$decision})",
-            'Result: '.($toolCall->result ?? '(none)'),
-        ]);
-    }
-
     protected function recordToolCall(ToolCall $toolCall): void
     {
         $this->toolCalls[$toolCall->id] ??= new ToolCallRecord($toolCall->name, $toolCall->arguments);
