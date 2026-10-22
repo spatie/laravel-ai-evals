@@ -19,7 +19,7 @@
             --link: #1f5fcc;
             --focus: #1f5fcc;
             --selection: #cfe0ff;
-            --meter-empty: #d9dde3;
+            --meter-empty: #cfd4db;
             --passed: #17703f;
             --passed-background: #e5f4eb;
             --passed-fill: #2f9e5f;
@@ -44,7 +44,7 @@
                 --link: #86b4ff;
                 --focus: #86b4ff;
                 --selection: #2b4778;
-                --meter-empty: #353b45;
+                --meter-empty: #3b424d;
                 --passed: #72d49b;
                 --passed-background: rgba(63, 178, 111, 0.16);
                 --passed-fill: #3fb26f;

@@ -10,7 +10,7 @@
 <x-ai-tests::layout :title="$result->title().' · AI test results'">
     @push('styles')
         <style>
-            .back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; font-size: 14px; }
+            .back { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; margin-bottom: 14px; font-size: 14px; }
             .back svg { width: 14px; height: 14px; }
             .result-header { padding-bottom: 24px; border-bottom: 1px solid var(--border); }
             .verdict { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 12px 0 0; }
@@ -56,9 +56,10 @@
             .tool-calls li + li { margin-top: 4px; }
             .tool-name { font-weight: 600; }
             .tool-arguments { color: var(--muted); }
-            .answer { padding: 16px; }
+            .answer { padding: 16px; overflow-wrap: anywhere; }
             .answer > * { max-width: 75ch; }
             .answer pre, .answer table { max-width: none; }
+            .answer table, .fallback table { display: block; overflow-x: auto; font-size: 14px; }
 
             .fallback > h1:first-child { display: none; }
 
@@ -69,10 +70,12 @@
         </style>
     @endpush
 
-    <a class="back" href="{{ route('ai-tests.index') }}">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
-        All results
-    </a>
+    <nav aria-label="Breadcrumb">
+        <a class="back" href="{{ route('ai-tests.index') }}">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
+            All results
+        </a>
+    </nav>
 
     <header class="result-header">
         <h1>{{ $result->title() }}</h1>
