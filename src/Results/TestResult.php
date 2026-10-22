@@ -5,17 +5,20 @@ namespace Spatie\LaravelAiTests\Results;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Spatie\LaravelAiTests\AiTest;
+use Spatie\LaravelAiTests\Checks\Expectation;
 
 class TestResult
 {
     /**
      * @param  array<int, string>  $prompts
+     * @param  array<int, array<int, Expectation>>  $expectations
      * @param  array<int, RunResult>  $runs
      * @param  array<string, string>  $context
      */
     public function __construct(
         public AiTest $aiTest,
         public array $prompts,
+        public array $expectations,
         public array $runs,
         public float $minPassRate,
         public CarbonImmutable $ranAt,

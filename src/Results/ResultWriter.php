@@ -77,13 +77,13 @@ class ResultWriter
     {
         return [
             'prompt' => $this->normalizeLineEndings($result->prompts[$index]),
-            'checks' => $this->checks($result, $turn, $index),
+            'checks' => $this->checks($result, $index),
             'runs' => array_map(fn (RunResult $run): array => $this->run($run, $index), $result->runs),
         ];
     }
 
     /** @return array<int, array<string, mixed>> */
-    protected function checks(TestResult $result, Turn $turn, int $index): array
+    protected function checks(TestResult $result, int $index): array
     {
         return array_map(function (Expectation $expectation) use ($result, $index): array {
             $runs = [];
@@ -105,7 +105,7 @@ class ResultWriter
                 'passed_runs' => count(array_filter($runs)),
                 'runs' => $runs,
             ];
-        }, $turn->expectations());
+        }, $result->expectations[$index]);
     }
 
     /** @return array<string, mixed> */

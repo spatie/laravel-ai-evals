@@ -3,10 +3,13 @@
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Laravel\Ai\Approvals\PendingApproval;
+use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
+use Laravel\Ai\Responses\Data\ToolCall;
 use PHPUnit\Framework\AssertionFailedError;
 use Spatie\LaravelAiTests\Drivers\AgentDriver;
 use Spatie\LaravelAiTests\Judge\JudgeAgent;
+use Spatie\LaravelAiTests\Tests\TestSupport\LookupOrderTool;
 use Spatie\LaravelAiTests\Tests\TestSupport\ScopedShopDriver;
 use Spatie\LaravelAiTests\Tests\TestSupport\ShopDriver;
 use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
@@ -165,6 +168,63 @@ it('passes the driver to the prompt closures', function () {
     SupportAgent::assertPrompted('I am Ada. Where is order A-1?');
 
     expect(resultFile('uses-the-driver-data-in-prompts')->get('turns')[0]['prompt'])->toBe('I am Ada. Where is order A-1?');
+});
+
+it('resolves expectation closures with the driver once before the runs', function () {
+    SupportAgent::fake([
+        new ToolCall('call-1', 'lookup_order', ['order' => 'A-1']),
+        'Hi Ada, order A-1 shipped.',
+        new ToolCall('call-2', 'lookup_order', ['order' => 'A-1']),
+        'Hi Ada, order A-1 shipped.',
+    ]);
+
+    JudgeAgent::fake(fn () => ['verdicts' => [['criterion' => 1, 'reason' => 'It greets Ada.', 'pass' => true]]]);
+
+    $resolvedTimes = 0;
+
+    $aiTest = makeAiTest('uses the driver data in expectations');
+
+    $aiTest
+        ->driver(fn () => ShopDriver::forNewCustomer())
+        ->runs(2)
+        ->user('Where is my order?')
+        ->expectTools(called: fn ($driver) => [LookupOrderTool::class], maxCalls: fn () => 1)
+        ->expectMentions(function (ShopDriver $shop) use (&$resolvedTimes) {
+            $resolvedTimes++;
+
+            return "A-{$shop->customer->id}";
+        })
+        ->expectRubric(fn (ShopDriver $shop) => "Greets {$shop->customer->name} by name.");
+
+    $aiTest->execute();
+
+    expect($resolvedTimes)->toBe(1);
+
+    expect(array_column(resultFile('uses-the-driver-data-in-expectations')->get('turns')[0]['checks'], 'label'))->toBe([
+        'Calls `lookup_order`',
+        'At most 1 tool calls',
+        'Mentions `A-1`',
+        'Greets Ada by name.',
+    ]);
+
+    JudgeAgent::assertPrompted(fn (AgentPrompt $prompt) => str_contains($prompt->prompt, '1. Greets Ada by name.'));
+});
+
+it('fails before the first run when an expectation closure returns no usable value', function () {
+    $aiTest = makeAiTest('expects a missing order');
+
+    $aiTest
+        ->driver(fn () => ShopDriver::forNewCustomer())
+        ->runs(1)
+        ->user('Where is my order?')
+        ->expectMentions(fn () => null);
+
+    expect(fn () => $aiTest->execute())->toThrow(
+        LogicException::class,
+        'The AI test "expects a missing order" has a check that can\'t be set up. A closure given to expectMentions() returned null.',
+    );
+
+    SupportAgent::assertNeverPrompted();
 });
 
 it('rolls back the database after each run', function () {

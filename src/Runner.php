@@ -8,9 +8,12 @@ use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Approvals\PendingApproval;
 use LogicException;
 use Spatie\LaravelAiTests\Checks\Check;
+use Spatie\LaravelAiTests\Checks\Expectation;
+use Spatie\LaravelAiTests\Checks\RubricCriterion;
 use Spatie\LaravelAiTests\Drivers\DescribesContext;
 use Spatie\LaravelAiTests\Drivers\Driver;
 use Spatie\LaravelAiTests\Judge\Judge;
+use Spatie\LaravelAiTests\Results\CheckOutcome;
 use Spatie\LaravelAiTests\Results\RunResult;
 use Spatie\LaravelAiTests\Results\TestResult;
 use Spatie\LaravelAiTests\Results\TurnResult;
@@ -36,18 +39,27 @@ class Runner
         $context = $driver instanceof DescribesContext ? $driver->context() : [];
 
         $prompts = array_map(
-            fn (Turn $turn): string => $this->resolvePrompt($turn, $driver),
+            fn (Turn $turn): string => $this->callWithDriver($turn->prompt, $driver),
             $aiTest->turns,
         );
 
+        $expectations = $this->resolveExpectations($aiTest, $driver);
+
         $runs = array_map(
-            fn (int $number): RunResult => $this->runOnce($aiTest, $driver, $prompts, $number),
+            fn (int $number): RunResult => $this->runOnce(
+                $aiTest,
+                $driver,
+                $prompts,
+                $expectations,
+                $number,
+            ),
             range(1, $aiTest->runCount()),
         );
 
         return new TestResult(
             aiTest: $aiTest,
             prompts: $prompts,
+            expectations: $expectations,
             runs: $runs,
             minPassRate: $aiTest->requiredPassRate(),
             ranAt: $ranAt,
@@ -68,20 +80,52 @@ class Runner
         return $driver;
     }
 
-    protected function resolvePrompt(Turn $turn, Driver $driver): string
+    protected function callWithDriver(mixed $value, Driver $driver): mixed
     {
-        if (! $turn->prompt instanceof Closure) {
-            return $turn->prompt;
+        if (! $value instanceof Closure) {
+            return $value;
         }
 
-        return app()->call($turn->prompt, [$driver::class => $driver, 'driver' => $driver]);
+        return app()->call($value, [$driver::class => $driver, 'driver' => $driver]);
     }
 
-    /** @param array<int, string> $prompts */
+    /** @return array<int, array<int, Expectation>> */
+    protected function resolveExpectations(AiTest $aiTest, Driver $driver): array
+    {
+        try {
+            return array_map(
+                fn (Turn $turn): array => $this->ensureLabelled(
+                    $turn->resolveExpectations(fn (mixed $value): mixed => $this->callWithDriver($value, $driver)),
+                ),
+                $aiTest->turns,
+            );
+        } catch (Throwable $exception) {
+            throw new LogicException("The AI test \"{$aiTest->description}\" has a check that can't be set up. {$exception->getMessage()}", previous: $exception);
+        }
+    }
+
+    /**
+     * @param  array<int, Expectation>  $expectations
+     * @return array<int, Expectation>
+     */
+    protected function ensureLabelled(array $expectations): array
+    {
+        foreach ($expectations as $expectation) {
+            $expectation->label();
+        }
+
+        return $expectations;
+    }
+
+    /**
+     * @param  array<int, string>  $prompts
+     * @param  array<int, array<int, Expectation>>  $expectations
+     */
     protected function runOnce(
         AiTest $aiTest,
         Driver $driver,
         array $prompts,
+        array $expectations,
         int $number,
     ): RunResult {
         $run = new RunResult($number);
@@ -97,7 +141,7 @@ class Runner
 
                 $this->converse($driver, $turn, $unfinishedTurn);
 
-                $run->turns[] = $this->evaluate($turn, $unfinishedTurn, array_column($run->turns, 'transcript'));
+                $run->turns[] = $this->evaluate($expectations[$index], $unfinishedTurn, array_column($run->turns, 'transcript'));
 
                 $unfinishedTurn = null;
             }
@@ -134,16 +178,22 @@ class Runner
         }
     }
 
-    /** @param array<int, Transcript> $earlierTurns */
-    protected function evaluate(Turn $turn, Transcript $transcript, array $earlierTurns): TurnResult
+    /**
+     * @param  array<int, Expectation>  $expectations
+     * @param  array<int, Transcript>  $earlierTurns
+     */
+    protected function evaluate(array $expectations, Transcript $transcript, array $earlierTurns): TurnResult
     {
-        $outcomes = array_map(
-            fn (Check $check) => $check->evaluate($transcript),
-            $turn->checks,
-        );
+        $checks = array_filter($expectations, fn (Expectation $expectation): bool => $expectation instanceof Check);
+        $rubric = array_filter($expectations, fn (Expectation $expectation): bool => $expectation instanceof RubricCriterion);
+
+        $outcomes = array_values(array_map(
+            fn (Check $check): CheckOutcome => $check->evaluate($transcript),
+            $checks,
+        ));
 
         try {
-            $judgeResult = $this->judge->evaluate($turn->rubric, $transcript, $earlierTurns);
+            $judgeResult = $this->judge->evaluate(array_values($rubric), $transcript, $earlierTurns);
         } catch (Throwable $exception) {
             return new TurnResult($transcript, $outcomes, judgeError: $this->describe($exception));
         }

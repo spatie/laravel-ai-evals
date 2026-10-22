@@ -109,10 +109,12 @@ aiTest('cancels an order after confirmation')
 | `user()` | Starts a turn with this message. Pass a closure that receives the driver when the message depends on the test data. |
 | `expectTools()` | Tool classes or tool names that must or must not be called, and a maximum number of calls. |
 | `expectMaxWords()` | Maximum number of words in the answer of the turn. |
+| `expectMentions()` | Values the answer must contain, such as an order number or a link. |
+| `expectMentionsInOrder()` | Values the answer must contain in this order. |
 | `expectRubric()` | One or more criteria for the LLM judge. |
 | `approveAll()` | Approves every tool call that waits for approval in this turn. Without it, they are rejected. |
 
-Tool checks count every tool call of the turn, including the calls after an approval. A tool class is matched by its `name()`, or by its class name when it has no public `name()` method. Tool names are resolved before the first run, so a tool class the container can't build fails the test right away. Words are tokens with at least one letter or digit, so Markdown bullets do not count. Write rubric criteria as concrete, checkable statements. A vague criterion gives noisy results. The judge grades one turn at a time. For a later turn, it also gets the earlier turns of the run (their prompts, tool calls without results, and answers) as context, so a criterion can refer to "those orders", but only the current turn is graded.
+Tool checks count every tool call of the turn, including the calls after an approval. A tool class is matched by its `name()`, or by its class name when it has no public `name()` method. Tool names are resolved before the first run, so a tool class the container can't build fails the test right away. Words are tokens with at least one letter or digit, so Markdown bullets do not count. A mention is a case-sensitive match anywhere in the answer of the turn. For `expectMentionsInOrder()`, the first mention of each value must come after the first mention of the value before it. Write rubric criteria as concrete, checkable statements. A vague criterion gives noisy results. The judge grades one turn at a time. For a later turn, it also gets the earlier turns of the run (their prompts, tool calls without results, and answers) as context, so a criterion can refer to "those orders", but only the current turn is graded.
 
 ### Test data
 
@@ -160,6 +162,30 @@ aiTest('summarizes an order')
 ```
 
 Each run is wrapped in a database transaction that is rolled back afterwards, so changes made by one run do not leak into the next. The data from the `driver()` closure is created once, before the runs.
+
+### Checking known values
+
+The `expectTools()`, `expectMentions()`, `expectMentionsInOrder()` and `expectRubric()` arguments can be closures too. Like a `user()` closure, they receive the driver and return the value, or an array of values. They run once per test, after the `driver()` closure and before the runs, so the result file shows the values they returned. This lets a test check the answer against the data it created, not only against what the tools returned. Say the seeder of the `ShopDriver` above also keeps its orders by a reference:
+
+```php
+class ShopDriver extends AgentDriver
+{
+    // ...
+
+    public function orderUrl(string $reference): string
+    {
+        return route('orders.show', $this->seeder->orders[$reference]);
+    }
+}
+
+aiTest('links to a late order')
+    ->driver(fn () => ShopDriver::seeded())
+    ->user('Which of my orders is late?')
+    ->expectMentions(fn (ShopDriver $driver) => $driver->orderUrl('late-order'))
+    ->expectRubric(fn (ShopDriver $driver) => "Says that order {$driver->seeder->orders['late-order']->number} is late, and why.");
+```
+
+Prefer a mention over a rubric criterion for exact values the agent must output, such as links to records, IDs or counts. A mention costs nothing, does not depend on the judge, and its failure names the missing value. Use a rubric criterion when the wording can vary.
 
 ## Drivers
 
@@ -271,6 +297,12 @@ turns:
         runs:
           1: true
           2: true
+      - label: 'Mentions `https://shop.test/orders/1234`'
+        kind: mentions
+        passed_runs: 1
+        runs:
+          1: true
+          2: false
       - label: 'Says when the order shipped.'
         kind: rubric
         passed_runs: 1
@@ -286,7 +318,7 @@ turns:
               order: '1234'
             status: completed
         answer: |-
-          Order **1234** shipped yesterday.
+          [Order **1234**](https://shop.test/orders/1234) shipped yesterday.
 
           You will get a tracking link by email.
         verdicts:
