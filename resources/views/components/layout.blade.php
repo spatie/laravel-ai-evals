@@ -86,7 +86,6 @@
         thead th { border-bottom-color: var(--border-strong); }
         th:first-child, td:first-child { padding-left: 0; }
         th:last-child, td:last-child { padding-right: 0; }
-        .align-end { text-align: right; }
 
         .status { display: inline-flex; align-items: center; gap: 6px; padding: 1px 9px 1px 7px; border-radius: 999px; font-size: 13px; font-weight: 600; line-height: 22px; white-space: nowrap; }
         .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }

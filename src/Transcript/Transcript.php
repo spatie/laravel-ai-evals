@@ -103,12 +103,12 @@ class Transcript
 
     protected function recordToolCall(ToolCall $toolCall): void
     {
-        $this->toolCalls[$toolCall->id] ??= new ToolCallRecord($toolCall->id, $toolCall->name, $toolCall->arguments);
+        $this->toolCalls[$toolCall->id] ??= new ToolCallRecord($toolCall->name, $toolCall->arguments);
     }
 
     protected function recordToolResult(ToolResult $toolResult): void
     {
-        $record = $this->toolCalls[$toolResult->id] ??= new ToolCallRecord($toolResult->id, $toolResult->name, $toolResult->arguments);
+        $record = $this->toolCalls[$toolResult->id] ??= new ToolCallRecord($toolResult->name, $toolResult->arguments);
 
         $record->result = Str::limit($toolResult->text(), 15000);
 
@@ -121,7 +121,7 @@ class Transcript
 
     protected function recordPendingApproval(PendingApproval $pendingApproval): void
     {
-        $record = $this->toolCalls[$pendingApproval->id] ??= new ToolCallRecord($pendingApproval->id, $pendingApproval->tool, $pendingApproval->arguments);
+        $record = $this->toolCalls[$pendingApproval->id] ??= new ToolCallRecord($pendingApproval->tool, $pendingApproval->arguments);
 
         $record->status = ToolCallStatus::Pending;
     }

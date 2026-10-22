@@ -7,7 +7,6 @@ class CheckRow
     /** @param array<int, bool> $runs */
     public function __construct(
         public string $label,
-        public ?string $kind,
         public array $runs,
     ) {}
 
@@ -18,7 +17,6 @@ class CheckRow
 
         return new self(
             label: (string) ($data['label'] ?? ''),
-            kind: isset($data['kind']) ? (string) $data['kind'] : null,
             runs: array_map(fn (mixed $passed): bool => $passed === true, $runs),
         );
     }
