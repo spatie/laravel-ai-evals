@@ -87,6 +87,16 @@ class AiTest
         return Str::ucfirst($this->description);
     }
 
+    public function runCount(): int
+    {
+        return (int) ($this->runs ?? config('ai-tests.runs'));
+    }
+
+    public function requiredPassRate(): float
+    {
+        return (float) ($this->minPassRate ?? config('ai-tests.min_pass_rate'));
+    }
+
     public function ensureRunnable(): void
     {
         if ($this->driver === null) {
@@ -95,6 +105,14 @@ class AiTest
 
         if ($this->turns === []) {
             throw new LogicException("The AI test \"{$this->description}\" has no turns. Call ->user().");
+        }
+
+        if ($this->runCount() < 1) {
+            throw new LogicException("The AI test \"{$this->description}\" needs at least one run, but has {$this->runCount()}.");
+        }
+
+        if ($this->requiredPassRate() < 0 || $this->requiredPassRate() > 1) {
+            throw new LogicException("The minimum pass rate of the AI test \"{$this->description}\" must be between 0 and 1, but is {$this->requiredPassRate()}.");
         }
     }
 

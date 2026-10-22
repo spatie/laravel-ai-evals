@@ -319,3 +319,54 @@ it('fails with the crash and keeps the transcript of the crashed turn', function
         ],
     ]);
 });
+
+it('passes with the default runs and minimum pass rate when two of three runs pass', function () {
+    SupportAgent::fake(['Shipped.', 'Your order shipped yesterday afternoon.', 'Shipped.']);
+
+    $aiTest = makeAiTest('passes two of three runs');
+
+    $aiTest
+        ->driver(new AgentDriver(SupportAgent::class))
+        ->user('Where is my order?')
+        ->expectMaxWords(2);
+
+    $aiTest->execute();
+
+    expect(resultFile('passes-two-of-three-runs')->data)->toMatchArray([
+        'runs' => 3,
+        'passed_runs' => 2,
+        'pass_rate' => 0.67,
+        'min_pass_rate' => 0.66,
+        'passed' => true,
+    ]);
+});
+
+it('compares the minimum pass rate with the unrounded pass rate', function () {
+    SupportAgent::fake(['Shipped.', 'Your order shipped yesterday afternoon.', 'Shipped.']);
+
+    $aiTest = makeAiTest('just misses the minimum pass rate');
+
+    $aiTest
+        ->driver(new AgentDriver(SupportAgent::class))
+        ->minPassRate(0.67)
+        ->user('Where is my order?')
+        ->expectMaxWords(2);
+
+    expect(fn () => $aiTest->execute())->toThrow(AssertionFailedError::class, '2/3 runs passed');
+});
+
+it('refuses an invalid number of runs or minimum pass rate', function (int $runs, float $minPassRate, string $message) {
+    $aiTest = makeAiTest('is misconfigured');
+
+    $aiTest
+        ->driver(new AgentDriver(SupportAgent::class))
+        ->runs($runs)
+        ->minPassRate($minPassRate)
+        ->user('Where is my order?');
+
+    expect(fn () => $aiTest->execute())->toThrow(LogicException::class, $message);
+})->with([
+    'no runs' => [0, 0.5, 'needs at least one run, but has 0'],
+    'a pass rate above 1' => [3, 66, 'must be between 0 and 1, but is 66'],
+    'a negative pass rate' => [3, -0.5, 'must be between 0 and 1, but is -0.5'],
+]);

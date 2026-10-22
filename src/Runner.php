@@ -42,14 +42,14 @@ class Runner
 
         $runs = array_map(
             fn (int $number): RunResult => $this->runOnce($aiTest, $driver, $prompts, $number),
-            range(1, $aiTest->runs ?? config('ai-tests.runs')),
+            range(1, $aiTest->runCount()),
         );
 
         return new TestResult(
             aiTest: $aiTest,
             prompts: $prompts,
             runs: $runs,
-            minPassRate: $aiTest->minPassRate ?? (float) config('ai-tests.min_pass_rate'),
+            minPassRate: $aiTest->requiredPassRate(),
             ranAt: $ranAt,
         );
     }

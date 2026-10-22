@@ -41,7 +41,7 @@ class TestResult
             return 0.0;
         }
 
-        return round($this->passedRuns() / $this->judgedRuns(), 2);
+        return $this->passedRuns() / $this->judgedRuns();
     }
 
     public function passed(): bool

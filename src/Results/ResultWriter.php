@@ -59,7 +59,7 @@ class ResultWriter
             'runs' => count($result->runs),
             'passed_runs' => $result->passedRuns(),
             'unjudged_runs' => $result->unjudgedRuns() > 0 ? $result->unjudgedRuns() : null,
-            'pass_rate' => $result->passRate(),
+            'pass_rate' => round($result->passRate(), 2),
             'min_pass_rate' => $result->minPassRate,
             'passed' => $result->passed(),
             'ran_at' => $result->ranAt->toIso8601String(),
