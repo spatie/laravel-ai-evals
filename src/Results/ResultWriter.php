@@ -6,16 +6,18 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Spatie\LaravelAiTests\Checks\Check;
 use Spatie\LaravelAiTests\Transcript\ToolCallRecord;
-use Spatie\LaravelAiTests\Transcript\ToolCallStatus;
-use Spatie\LaravelAiTests\Transcript\Transcript;
 use Spatie\LaravelAiTests\Turn;
 use Symfony\Component\Yaml\Yaml;
 
 class ResultWriter
 {
+    protected const InlineLevel = 20;
+
+    protected const Indentation = 2;
+
     public function write(TestResult $result): string
     {
-        $path = config('ai-tests.results_path')."/{$result->aiTest->slug()}.md";
+        $path = config('ai-tests.results_path')."/{$result->aiTest->slug()}.yaml";
 
         File::ensureDirectoryExists(dirname($path));
 
@@ -26,27 +28,22 @@ class ResultWriter
 
     public function render(TestResult $result): string
     {
-        $lines = [
-            '---',
-            rtrim(Yaml::dump($this->frontmatter($result))),
-            '---',
-            '',
-            "# {$result->aiTest->title()}",
-        ];
+        $yaml = Yaml::dump(
+            $this->data($result),
+            static::InlineLevel,
+            static::Indentation,
+            Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK | Yaml::DUMP_COMPACT_NESTED_MAPPING | Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE,
+        );
 
-        foreach ($result->aiTest->turns as $index => $turn) {
-            $lines = [...$lines, '', ...$this->turnSection($result, $turn, $index)];
-        }
-
-        return implode("\n", $lines)."\n";
+        return str_ends_with($yaml, "\n") ? $yaml : "{$yaml}\n";
     }
 
-    /** @return array<string, string|int|float|bool> */
-    protected function frontmatter(TestResult $result): array
+    /** @return array<string, mixed> */
+    protected function data(TestResult $result): array
     {
         $seederClass = $result->aiTest->seederClass;
 
-        $frontmatter = [
+        $facts = array_filter([
             'slug' => $result->aiTest->slug(),
             'title' => $result->aiTest->title(),
             'test_file' => Str::after($result->aiTest->testFile, base_path().DIRECTORY_SEPARATOR),
@@ -59,138 +56,94 @@ class ResultWriter
             'min_pass_rate' => $result->minPassRate,
             'passed' => $result->passed(),
             'ran_at' => $result->ranAt->toIso8601String(),
-        ];
+        ], fn (mixed $value): bool => $value !== null);
 
-        return array_filter($frontmatter, fn (mixed $value): bool => $value !== null);
+        $turns = array_map(
+            fn (Turn $turn, int $index): array => $this->turn($result, $turn, $index),
+            $result->aiTest->turns,
+            array_keys($result->aiTest->turns),
+        );
+
+        return [...$facts, 'turns' => $turns];
     }
 
-    /** @return array<int, string> */
-    protected function turnSection(TestResult $result, Turn $turn, int $index): array
+    /** @return array<string, mixed> */
+    protected function turn(TestResult $result, Turn $turn, int $index): array
     {
-        $prompt = Str::of($result->prompts[$index])->squish();
-
         return [
-            '## Turn '.($index + 1),
-            '',
-            "**User:** {$prompt}",
-            ...$this->checksTable($result, $turn, $index),
-            ...$this->judgeNotes($result, $index),
-            ...$this->crashes($result, $index),
-            ...$this->exampleAnswer($result, $index),
+            'prompt' => $this->normalizeLineEndings($result->prompts[$index]),
+            'checks' => $this->checks($result, $turn, $index),
+            'runs' => array_map(fn (RunResult $run): array => $this->run($run, $index), $result->runs),
         ];
     }
 
-    /** @return array<int, string> */
-    protected function checksTable(TestResult $result, Turn $turn, int $index): array
+    /** @return array<int, array<string, mixed>> */
+    protected function checks(TestResult $result, Turn $turn, int $index): array
     {
-        $labels = [
-            ...array_map(fn (Check $check): string => $check->label(), $turn->checks),
-            ...$turn->rubric,
+        $checks = [
+            ...array_map(fn (Check $check): array => ['label' => $check->label(), 'kind' => $check->kind()], $turn->checks),
+            ...array_map(fn (string $criterion): array => ['label' => $criterion, 'kind' => 'rubric'], $turn->rubric),
         ];
 
-        if ($labels === []) {
-            return [];
-        }
+        return array_map(function (array $check, int $checkIndex) use ($result, $index): array {
+            $runs = [];
 
-        $rows = ['', '| Check | Passed |', '| --- | --- |'];
-        $runCount = count($result->runs);
-
-        foreach ($labels as $checkIndex => $label) {
-            $passedCount = count(array_filter(
-                $result->runs,
-                fn (RunResult $run): bool => $run->turns[$index]->outcomes[$checkIndex]->passed ?? false,
-            ));
-
-            $rows[] = '| '.str_replace('|', '\|', $label)." | {$passedCount}/{$runCount} |";
-        }
-
-        return $rows;
-    }
-
-    /** @return array<int, string> */
-    protected function judgeNotes(TestResult $result, int $index): array
-    {
-        $notes = [];
-
-        foreach ($result->runs as $run) {
-            foreach ($run->turns[$index]->outcomes ?? [] as $outcome) {
-                if ($outcome->judged && ! $outcome->passed) {
-                    $notes[] = "- Run {$run->number}, \"".Str::limit($outcome->label, 40)."\": failed. {$outcome->reason}";
-                }
+            foreach ($result->runs as $run) {
+                $runs[$run->number] = $run->turns[$index]->outcomes[$checkIndex]->passed ?? false;
             }
-        }
 
-        if ($notes === []) {
-            return [];
-        }
-
-        return ['', '**Judge notes**', '', ...$notes];
+            return [...$check, 'passed_runs' => count(array_filter($runs)), 'runs' => $runs];
+        }, $checks, array_keys($checks));
     }
 
-    /** @return array<int, string> */
-    protected function crashes(TestResult $result, int $index): array
+    /** @return array<string, mixed> */
+    protected function run(RunResult $run, int $index): array
     {
-        $crashes = [];
-
-        foreach ($result->runs as $run) {
-            if ($run->crash !== null && count($run->turns) === $index) {
-                $crashes[] = "- Run {$run->number}: ".Str::of($run->crash)->squish()->limit(500);
-            }
-        }
-
-        if ($crashes === []) {
-            return [];
-        }
-
-        return ['', '**Crashes**', '', ...$crashes];
-    }
-
-    /** @return array<int, string> */
-    protected function exampleAnswer(TestResult $result, int $index): array
-    {
-        $run = $result->exampleRun();
         $turnResult = $run->turns[$index] ?? null;
 
         if ($turnResult === null) {
-            return ['', "**Example answer** (run {$run->number})", '', '_This run crashed before it finished this turn._'];
+            return count($run->turns) === $index
+                ? ['run' => $run->number, 'passed' => false, 'crash' => (string) Str::of((string) $run->crash)->squish()->limit(500)]
+                : ['run' => $run->number, 'passed' => false, 'not_reached' => true];
         }
 
-        $status = $turnResult->passed() ? 'passed' : 'failed';
-        $answer = $turnResult->transcript->answer();
+        $verdicts = array_map(
+            fn (CheckOutcome $outcome): array => array_filter([
+                'check' => $outcome->label,
+                'passed' => $outcome->passed,
+                'reason' => $outcome->reason,
+            ], fn (mixed $value): bool => $value !== null),
+            array_values(array_filter(
+                $turnResult->outcomes,
+                fn (CheckOutcome $outcome): bool => $outcome->judged || ! $outcome->passed,
+            )),
+        );
 
-        return [
-            '',
-            "**Example answer** (run {$run->number}, {$status})",
-            '',
-            'Tools: '.$this->toolList($turnResult->transcript),
-            '',
-            $answer !== '' ? $answer : '_No answer text._',
-        ];
+        return array_filter([
+            'run' => $run->number,
+            'passed' => $turnResult->passed(),
+            'tool_calls' => array_values(array_map(
+                fn (ToolCallRecord $toolCall): array => $this->toolCall($toolCall),
+                $turnResult->transcript->toolCalls,
+            )),
+            'answer' => $this->normalizeLineEndings($turnResult->transcript->answer()),
+            'verdicts' => $verdicts !== [] ? $verdicts : null,
+        ], fn (mixed $value): bool => $value !== null);
     }
 
-    protected function toolList(Transcript $transcript): string
+    /** @return array<string, mixed> */
+    protected function toolCall(ToolCallRecord $toolCall): array
     {
-        if ($transcript->toolCalls === []) {
-            return 'none';
-        }
-
-        return collect($transcript->toolCalls)
-            ->map(fn (ToolCallRecord $toolCall): string => $this->toolDescription($toolCall))
-            ->implode(', ');
+        return array_filter([
+            'name' => $toolCall->name,
+            'arguments' => $toolCall->arguments !== [] ? $toolCall->arguments : null,
+            'status' => $toolCall->status->value,
+            'approval' => $toolCall->decisionLabel(),
+        ], fn (mixed $value): bool => $value !== null);
     }
 
-    protected function toolDescription(ToolCallRecord $toolCall): string
+    protected function normalizeLineEndings(string $text): string
     {
-        $details = array_filter([
-            $toolCall->argumentList(),
-            $toolCall->decisionLabel(),
-            $toolCall->status === ToolCallStatus::Failed ? 'failed' : null,
-        ]);
-
-        if ($details === []) {
-            return "`{$toolCall->name}`";
-        }
-
-        return "`{$toolCall->name}` (".implode(', ', $details).')';
+        return str_replace(["\r\n", "\r"], "\n", $text);
     }
 }

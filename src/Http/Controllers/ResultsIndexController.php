@@ -13,7 +13,7 @@ class ResultsIndexController
     {
         $resultsPath = config('ai-tests.results_path');
 
-        $results = collect(File::glob($resultsPath.'/*.md'))
+        $results = collect(File::glob($resultsPath.'/*.yaml'))
             ->map(fn (string $path): ResultFile => ResultFile::fromPath($path))
             ->sortBy([
                 fn (ResultFile $a, ResultFile $b): int => ($a->status() !== 'failed') <=> ($b->status() !== 'failed'),

@@ -13,5 +13,5 @@ function makeAiTest(string $description): AiTest
 
 function resultFile(string $slug): ResultFile
 {
-    return ResultFile::fromPath(config('ai-tests.results_path')."/{$slug}.md");
+    return ResultFile::fromPath(config('ai-tests.results_path')."/{$slug}.yaml");
 }

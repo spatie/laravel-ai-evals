@@ -16,6 +16,11 @@ class MaxWordsCheck extends Check
         return "At most {$this->maxWords} words";
     }
 
+    public function kind(): string
+    {
+        return 'max_words';
+    }
+
     public function evaluate(Transcript $transcript): CheckOutcome
     {
         $wordCount = $transcript->wordCount();

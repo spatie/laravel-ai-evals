@@ -4,7 +4,7 @@
 [![GitHub Tests Action Status](https://img.shields.io/github/actions/workflow/status/spatie/laravel-ai-tests/run-tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/spatie/laravel-ai-tests/actions?query=workflow%3Arun-tests+branch%3Amain)
 [![Total Downloads](https://img.shields.io/packagist/dt/spatie/laravel-ai-tests.svg?style=flat-square)](https://packagist.org/packages/spatie/laravel-ai-tests)
 
-Unit tests with faked responses tell you that your code works. They don't tell you whether your agent gives good answers. This package lets you write Pest tests that talk to your [Laravel AI](https://github.com/laravel/ai) agent with the real model, run every conversation a few times, check each answer, and write a readable Markdown result file per test.
+Unit tests with faked responses tell you that your code works. They don't tell you whether your agent gives good answers. This package lets you write Pest tests that talk to your [Laravel AI](https://github.com/laravel/ai) agent with the real model, run every conversation a few times, check each answer, and write a readable YAML result file per test.
 
 ```php
 aiTest('tells a customer where their order is')
@@ -190,15 +190,63 @@ When a test is below its minimum pass rate, it fails with a message that points 
 
 ## Results
 
-Every test writes `<results_path>/<slug>.md`, where the slug is `Str::slug()` of the description. A new run overwrites the file. Commit the result files, so a diff shows how a prompt or tool change moved the results.
+Every test writes `<results_path>/<slug>.yaml`, where the slug is `Str::slug()` of the description. A new run overwrites the file. Commit the result files, so a diff shows how a prompt or tool change moved the results.
 
-The file starts with flat YAML frontmatter: `slug`, `title`, `test_file`, `seeder`, `model`, `judge_model`, `runs`, `passed_runs`, `pass_rate`, `min_pass_rate`, `passed` and `ran_at`. Each turn then has the user message, a table with the passed runs per check, the judge notes for failed criteria, crashes, and an example answer. The example is the first failing run, or run 1 when every run passed.
+The file starts with the facts of the test: `slug`, `title`, `test_file`, `seeder`, `model`, `judge_model`, `runs`, `passed_runs`, `pass_rate`, `min_pass_rate`, `passed` and `ran_at`. Then each turn has its prompt, the checks with the result of every run, and every run with its tool calls, its answer and the verdicts. Verdicts list every judged criterion and every failed check, each with its reason. Multi-line answers are written as literal blocks, so they read like the original text.
 
-When a run throws an exception, the run fails and the result file lists the exception. The other runs still count.
+```yaml
+slug: tells-a-customer-where-their-order-is
+title: 'Tells a customer where their order is'
+test_file: tests/AiTests/OrderTest.php
+model: gpt-5.4
+judge_model: gpt-5.4
+runs: 2
+passed_runs: 1
+pass_rate: 0.5
+min_pass_rate: 0.66
+passed: false
+ran_at: '2026-10-22T10:00:00+00:00'
+turns:
+  - prompt: 'Where is order 1234?'
+    checks:
+      - label: 'Calls `lookup_order`'
+        kind: tool
+        passed_runs: 2
+        runs:
+          1: true
+          2: true
+      - label: 'Says when the order shipped.'
+        kind: rubric
+        passed_runs: 1
+        runs:
+          1: true
+          2: false
+    runs:
+      - run: 1
+        passed: true
+        tool_calls:
+          - name: lookup_order
+            arguments:
+              order: '1234'
+            status: completed
+        answer: |-
+          Order **1234** shipped yesterday.
+
+          You will get a tracking link by email.
+        verdicts:
+          - check: 'Says when the order shipped.'
+            passed: true
+            reason: 'It says the order shipped yesterday.'
+      - run: 2
+        passed: false
+        crash: 'RuntimeException: The provider is down.'
+```
+
+When a run throws an exception, the run fails and its entry in that turn has a `crash` instead of an answer. Later turns mark the run as `not_reached`. The other runs still count.
 
 ### Viewing results
 
-In the `local` environment, the package registers a small results viewer at `/ai-tests`. It lists the result files and renders each one. Outside the local environment it returns a 404. Disable it with `ai-tests.viewer.enabled`.
+In the `local` environment, the package registers a small results viewer at `/ai-tests`. It lists the result files and shows each one, with a tab per run. The first failing run is selected. Outside the local environment it returns a 404. Disable it with `ai-tests.viewer.enabled`.
 
 ## Configuration
 

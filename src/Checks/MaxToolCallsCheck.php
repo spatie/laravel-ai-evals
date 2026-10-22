@@ -16,6 +16,11 @@ class MaxToolCallsCheck extends Check
         return "At most {$this->maxCalls} tool calls";
     }
 
+    public function kind(): string
+    {
+        return 'tool';
+    }
+
     public function evaluate(Transcript $transcript): CheckOutcome
     {
         $callCount = count($transcript->toolCalls);

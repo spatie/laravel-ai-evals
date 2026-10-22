@@ -2,27 +2,39 @@
 
 namespace Spatie\LaravelAiTests\Viewer;
 
-use Illuminate\Support\Str;
-
 class TurnSection
 {
     /**
      * @param  array<int, CheckRow>  $checks
-     * @param  array<int, RunNote>  $judgeNotes
-     * @param  array<int, RunNote>  $crashes
-     * @param  array<int, array{name: string, arguments: ?string}>|null  $toolCalls
+     * @param  array<int, RunSection>  $runs
      */
     public function __construct(
         public int $number,
-        public ?string $promptHtml,
+        public ?string $prompt,
         public array $checks,
-        public array $judgeNotes,
-        public array $crashes,
-        public ?string $exampleLabel,
-        public ?array $toolCalls,
-        public ?string $answerHtml,
-        public ?string $extraHtml,
+        public array $runs,
     ) {}
+
+    /** @param array<string, mixed> $data */
+    public static function fromData(int $number, array $data): self
+    {
+        $checks = is_array($data['checks'] ?? null) ? array_values($data['checks']) : [];
+        $runs = is_array($data['runs'] ?? null) ? array_values($data['runs']) : [];
+
+        return new self(
+            number: $number,
+            prompt: isset($data['prompt']) ? (string) $data['prompt'] : null,
+            checks: array_map(
+                fn (mixed $check): CheckRow => CheckRow::fromData(is_array($check) ? $check : []),
+                $checks,
+            ),
+            runs: array_map(
+                fn (mixed $run, int $index): RunSection => RunSection::fromData($index + 1, is_array($run) ? $run : []),
+                $runs,
+                array_keys($runs),
+            ),
+        );
+    }
 
     public function failingChecks(): int
     {
@@ -43,62 +55,53 @@ class TurnSection
         };
     }
 
-    public function hasExample(): bool
-    {
-        return $this->exampleLabel !== null;
-    }
-
-    public function exampleStatus(): ?string
-    {
-        if ($this->exampleLabel === null) {
-            return null;
-        }
-
-        return match (true) {
-            str_contains($this->exampleLabel, 'failed') => 'failed',
-            str_contains($this->exampleLabel, 'passed') => 'passed',
-            default => null,
-        };
-    }
-
-    public function exampleRun(): ?int
-    {
-        if (preg_match('/run (\d+)/', $this->exampleLabel ?? '', $matches) !== 1) {
-            return null;
-        }
-
-        return (int) $matches[1];
-    }
-
-    /** @return array<int, array{checkHtml: ?string, notes: array<int, RunNote>}> */
-    public function judgeNoteGroups(): array
+    /** @return array<int, array{checkHtml: string, notes: array<int, RunNote>}> */
+    public function failureGroups(): array
     {
         $groups = [];
 
-        foreach ($this->judgeNotes as $note) {
-            $key = $note->check ?? '';
+        foreach ($this->runs as $run) {
+            foreach ($run->verdicts as $verdict) {
+                if ($verdict->passed) {
+                    continue;
+                }
 
-            $groups[$key] ??= ['checkHtml' => $this->checkHtml($note->check), 'notes' => []];
-            $groups[$key]['notes'][] = $note;
+                $groups[$verdict->check] ??= ['checkHtml' => $verdict->checkHtml(), 'notes' => []];
+                $groups[$verdict->check]['notes'][] = $verdict;
+            }
         }
+
+        $labels = array_map(fn (CheckRow $check): string => $check->label, $this->checks);
+
+        uksort($groups, fn (string $a, string $b): int => $this->position($labels, $a) <=> $this->position($labels, $b));
 
         return array_values($groups);
     }
 
-    protected function checkHtml(?string $truncatedLabel): ?string
+    /** @param array<int, string> $labels */
+    protected function position(array $labels, string $label): int
     {
-        if ($truncatedLabel === null) {
-            return null;
-        }
+        $position = array_search($label, $labels, true);
 
-        $prefix = Str::endsWith($truncatedLabel, '...') ? Str::beforeLast($truncatedLabel, '...') : $truncatedLabel;
+        return $position === false ? PHP_INT_MAX : $position;
+    }
 
-        foreach ($this->checks as $check) {
-            if (str_starts_with($check->label, $prefix)) {
-                return $check->labelHtml;
+    /** @return array<int, RunSection> */
+    public function crashedRuns(): array
+    {
+        return array_values(array_filter($this->runs, fn (RunSection $run): bool => $run->crash !== null));
+    }
+
+    public function selectedRun(): ?RunSection
+    {
+        $reachedRuns = array_values(array_filter($this->runs, fn (RunSection $run): bool => ! $run->notReached));
+
+        foreach ($reachedRuns as $run) {
+            if (! $run->passed) {
+                return $run;
             }
         }
 
-        return ResultBody::inlineMarkdown($truncatedLabel);
+        return $reachedRuns[0] ?? $this->runs[0] ?? null;
     }
 }

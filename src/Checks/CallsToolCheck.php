@@ -17,6 +17,11 @@ class CallsToolCheck extends Check
         return 'Calls `'.ToolName::of($this->tool).'`';
     }
 
+    public function kind(): string
+    {
+        return 'tool';
+    }
+
     public function evaluate(Transcript $transcript): CheckOutcome
     {
         $toolName = ToolName::of($this->tool);

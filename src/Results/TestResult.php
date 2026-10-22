@@ -34,17 +34,6 @@ class TestResult
         return $this->passRate() >= $this->minPassRate;
     }
 
-    public function exampleRun(): RunResult
-    {
-        foreach ($this->runs as $run) {
-            if (! $run->passed()) {
-                return $run;
-            }
-        }
-
-        return $this->runs[0];
-    }
-
     public function model(): ?string
     {
         foreach ($this->turnResults() as $turnResult) {

@@ -4,23 +4,47 @@ namespace Spatie\LaravelAiTests\Viewer;
 
 class CheckRow
 {
+    /** @param array<int, bool> $runs */
     public function __construct(
         public string $label,
-        public string $labelHtml,
-        public ?int $passed,
-        public ?int $runs,
+        public ?string $kind,
+        public array $runs,
     ) {}
+
+    /** @param array<string, mixed> $data */
+    public static function fromData(array $data): self
+    {
+        $runs = is_array($data['runs'] ?? null) ? $data['runs'] : [];
+
+        return new self(
+            label: (string) ($data['label'] ?? ''),
+            kind: isset($data['kind']) ? (string) $data['kind'] : null,
+            runs: array_map(fn (mixed $passed): bool => $passed === true, $runs),
+        );
+    }
+
+    public function labelHtml(): string
+    {
+        return Html::withCode($this->label);
+    }
+
+    public function passedRuns(): int
+    {
+        return count(array_filter($this->runs));
+    }
+
+    public function runCount(): int
+    {
+        return count($this->runs);
+    }
 
     public function status(): string
     {
-        if ($this->passed === null || $this->runs === null) {
-            return 'unknown';
-        }
-
-        if ($this->passed === $this->runs) {
-            return 'passed';
-        }
-
-        return $this->passed === 0 ? 'failed' : 'partial';
+        return match (true) {
+            $this->runs === [] => 'unknown',
+            $this->passedRuns() === $this->runCount() => 'passed',
+            $this->passedRuns() === 0 => 'failed',
+            default => 'partial',
+        };
     }
 }

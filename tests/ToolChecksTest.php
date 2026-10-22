@@ -24,11 +24,17 @@ it('checks which tools the agent called', function () {
 
     $aiTest->execute();
 
-    expect(resultFile('looks-up-the-order')->body)
-        ->toContain('| Calls `lookup_order` | 1/1 |')
-        ->toContain('| Does not call `cancel_order` | 1/1 |')
-        ->toContain('| At most 1 tool calls | 1/1 |')
-        ->toContain('Tools: `lookup_order` (order: "1234")');
+    $turn = resultFile('looks-up-the-order')->get('turns')[0];
+
+    expect(array_map(fn (array $check) => [$check['label'], $check['kind'], $check['passed_runs']], $turn['checks']))->toBe([
+        ['Calls `lookup_order`', 'tool', 1],
+        ['Does not call `cancel_order`', 'tool', 1],
+        ['At most 1 tool calls', 'tool', 1],
+    ]);
+
+    expect($turn['runs'][0]['tool_calls'])->toBe([
+        ['name' => 'lookup_order', 'arguments' => ['order' => '1234'], 'status' => 'completed'],
+    ]);
 });
 
 it('fails a run that calls a forbidden tool', function () {
@@ -42,7 +48,8 @@ it('fails a run that calls a forbidden tool', function () {
 
     expect(fn () => $aiTest->execute())->toThrow(AssertionFailedError::class);
 
-    expect(resultFile('does-not-look-up-orders')->body)
-        ->toContain('| Does not call `lookup_order` | 0/1 |')
-        ->toContain('| At most 0 tool calls | 0/1 |');
+    expect(resultFile('does-not-look-up-orders')->get('turns')[0]['runs'][0]['verdicts'])->toBe([
+        ['check' => 'Does not call `lookup_order`', 'passed' => false, 'reason' => 'Called lookup_order.'],
+        ['check' => 'At most 0 tool calls', 'passed' => false, 'reason' => 'Made 1 tool calls.'],
+    ]);
 });

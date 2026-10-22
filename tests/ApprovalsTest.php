@@ -27,7 +27,9 @@ it('rejects pending tool calls by default', function () {
 
     SupportAgent::assertPrompted(fn (AgentPrompt $prompt) => $prompt->approvalDecisions?->get('call-1')?->isRejected() === true);
 
-    expect(resultFile('asks-before-cancelling')->body)->toContain('Tools: `cancel_order` (order: "1234", rejected)');
+    expect(resultFile('asks-before-cancelling')->get('turns')[0]['runs'][0]['tool_calls'])->toBe([
+        ['name' => 'cancel_order', 'arguments' => ['order' => '1234'], 'status' => 'pending', 'approval' => 'rejected'],
+    ]);
 });
 
 it('approves pending tool calls with approveAll', function () {
@@ -44,7 +46,9 @@ it('approves pending tool calls with approveAll', function () {
 
     SupportAgent::assertPrompted(fn (AgentPrompt $prompt) => $prompt->approvalDecisions?->get('call-1')?->isApproved() === true);
 
-    expect(resultFile('cancels-after-approval')->body)
-        ->toContain('Tools: `cancel_order` (order: "1234", approved)')
-        ->toContain('Done.');
+    expect(resultFile('cancels-after-approval')->get('turns')[0]['runs'][0])
+        ->toMatchArray(['answer' => 'Done.'])
+        ->tool_calls->toBe([
+            ['name' => 'cancel_order', 'arguments' => ['order' => '1234'], 'status' => 'pending', 'approval' => 'approved'],
+        ]);
 });

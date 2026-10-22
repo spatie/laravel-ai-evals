@@ -9,5 +9,7 @@ abstract class Check
 {
     abstract public function label(): string;
 
+    abstract public function kind(): string;
+
     abstract public function evaluate(Transcript $transcript): CheckOutcome;
 }
