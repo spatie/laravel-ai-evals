@@ -56,10 +56,7 @@ class Transcript
     /** @return array<int, string> */
     public function toolNames(): array
     {
-        return array_values(array_map(
-            fn (ToolCallRecord $toolCall): string => $toolCall->name,
-            $this->toolCalls,
-        ));
+        return array_column($this->toolCalls, 'name');
     }
 
     public function answer(): string

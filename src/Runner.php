@@ -145,9 +145,9 @@ class Runner
 
         $transcript->addResponse($response);
 
-        for ($round = 0; $round < static::MaxApprovalRounds; $round++) {
-            if ($response->pendingApprovals->isEmpty()) {
-                return $transcript;
+        for ($round = 1; $response->pendingApprovals->isNotEmpty(); $round++) {
+            if ($round > static::MaxApprovalRounds) {
+                throw new LogicException('The agent kept asking for approval after '.static::MaxApprovalRounds.' rounds.');
             }
 
             $decisions = $response->pendingApprovals
@@ -161,11 +161,7 @@ class Runner
             $transcript->addResponse($response);
         }
 
-        if ($response->pendingApprovals->isEmpty()) {
-            return $transcript;
-        }
-
-        throw new LogicException('The agent kept asking for approval after '.static::MaxApprovalRounds.' rounds.');
+        return $transcript;
     }
 
     protected function evaluate(Turn $turn, Transcript $transcript): TurnResult

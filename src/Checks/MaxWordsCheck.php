@@ -25,10 +25,12 @@ class MaxWordsCheck extends Check
     {
         $wordCount = $transcript->wordCount();
 
+        $passed = $wordCount <= $this->maxWords;
+
         return new CheckOutcome(
             label: $this->label(),
-            passed: $wordCount <= $this->maxWords,
-            reason: $wordCount <= $this->maxWords ? null : "Answered in {$wordCount} words.",
+            passed: $passed,
+            reason: $passed ? null : "Answered in {$wordCount} words.",
         );
     }
 }

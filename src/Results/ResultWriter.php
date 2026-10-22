@@ -2,6 +2,7 @@
 
 namespace Spatie\LaravelAiTests\Results;
 
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Spatie\LaravelAiTests\Checks\Check;
@@ -43,7 +44,7 @@ class ResultWriter
     {
         $seederClass = $result->aiTest->seederClass;
 
-        $facts = array_filter([
+        $facts = Arr::whereNotNull([
             'slug' => $result->aiTest->slug(),
             'title' => $result->aiTest->title(),
             'test_file' => Str::after($result->aiTest->testFile, base_path().DIRECTORY_SEPARATOR),
@@ -56,7 +57,7 @@ class ResultWriter
             'min_pass_rate' => $result->minPassRate,
             'passed' => $result->passed(),
             'ran_at' => $result->ranAt->toIso8601String(),
-        ], fn (mixed $value): bool => $value !== null);
+        ]);
 
         $turns = array_map(
             fn (Turn $turn, int $index): array => $this->turn($result, $turn, $index),
@@ -101,25 +102,17 @@ class ResultWriter
     {
         $turnResult = $run->turns[$index] ?? null;
 
-        if ($turnResult === null) {
-            return count($run->turns) === $index
-                ? ['run' => $run->number, 'passed' => false, 'crash' => (string) Str::of((string) $run->crash)->squish()->limit(500)]
-                : ['run' => $run->number, 'passed' => false, 'not_reached' => true];
+        if ($turnResult === null && count($run->turns) === $index) {
+            return ['run' => $run->number, 'passed' => false, 'crash' => (string) Str::of((string) $run->crash)->squish()->limit(500)];
         }
 
-        $verdicts = array_map(
-            fn (CheckOutcome $outcome): array => array_filter([
-                'check' => $outcome->label,
-                'passed' => $outcome->passed,
-                'reason' => $outcome->reason,
-            ], fn (mixed $value): bool => $value !== null),
-            array_values(array_filter(
-                $turnResult->outcomes,
-                fn (CheckOutcome $outcome): bool => $outcome->judged || ! $outcome->passed,
-            )),
-        );
+        if ($turnResult === null) {
+            return ['run' => $run->number, 'passed' => false, 'not_reached' => true];
+        }
 
-        return array_filter([
+        $verdicts = $this->verdicts($turnResult);
+
+        return Arr::whereNotNull([
             'run' => $run->number,
             'passed' => $turnResult->passed(),
             'tool_calls' => array_values(array_map(
@@ -128,18 +121,36 @@ class ResultWriter
             )),
             'answer' => $this->normalizeLineEndings($turnResult->transcript->answer()),
             'verdicts' => $verdicts !== [] ? $verdicts : null,
-        ], fn (mixed $value): bool => $value !== null);
+        ]);
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    protected function verdicts(TurnResult $turnResult): array
+    {
+        $reportedOutcomes = array_filter(
+            $turnResult->outcomes,
+            fn (CheckOutcome $outcome): bool => $outcome->judged || ! $outcome->passed,
+        );
+
+        return array_values(array_map(
+            fn (CheckOutcome $outcome): array => Arr::whereNotNull([
+                'check' => $outcome->label,
+                'passed' => $outcome->passed,
+                'reason' => $outcome->reason,
+            ]),
+            $reportedOutcomes,
+        ));
     }
 
     /** @return array<string, mixed> */
     protected function toolCall(ToolCallRecord $toolCall): array
     {
-        return array_filter([
+        return Arr::whereNotNull([
             'name' => $toolCall->name,
             'arguments' => $toolCall->arguments !== [] ? $toolCall->arguments : null,
             'status' => $toolCall->status->value,
             'approval' => $toolCall->decisionLabel(),
-        ], fn (mixed $value): bool => $value !== null);
+        ]);
     }
 
     protected function normalizeLineEndings(string $text): string

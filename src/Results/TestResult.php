@@ -3,6 +3,7 @@
 namespace Spatie\LaravelAiTests\Results;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Arr;
 use Spatie\LaravelAiTests\AiTest;
 
 class TestResult
@@ -36,29 +37,27 @@ class TestResult
 
     public function model(): ?string
     {
-        foreach ($this->turnResults() as $turnResult) {
-            if ($turnResult->transcript->model !== null) {
-                return $turnResult->transcript->model;
-            }
-        }
+        $turnResult = Arr::first(
+            $this->turnResults(),
+            fn (TurnResult $turnResult): bool => $turnResult->transcript->model !== null,
+        );
 
-        return null;
+        return $turnResult?->transcript->model;
     }
 
     public function judgeModel(): ?string
     {
-        foreach ($this->turnResults() as $turnResult) {
-            if ($turnResult->judgeModel !== null) {
-                return $turnResult->judgeModel;
-            }
-        }
+        $turnResult = Arr::first(
+            $this->turnResults(),
+            fn (TurnResult $turnResult): bool => $turnResult->judgeModel !== null,
+        );
 
-        return null;
+        return $turnResult?->judgeModel;
     }
 
     /** @return array<int, TurnResult> */
     protected function turnResults(): array
     {
-        return array_merge(...array_map(fn (RunResult $run): array => $run->turns, $this->runs));
+        return array_merge(...array_column($this->runs, 'turns'));
     }
 }
