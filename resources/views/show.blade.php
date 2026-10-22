@@ -1,12 +1,3 @@
-@php
-    $facts = array_filter([
-        'Model' => $result->get('model'),
-        'Judge' => $result->get('judge_model'),
-        'Seeder' => $result->get('seeder'),
-        'Test file' => $result->get('test_file'),
-    ]);
-@endphp
-
 <x-ai-tests::layout :title="$result->title().' · AI test results'">
     @push('styles')
         <style>
@@ -130,7 +121,7 @@
     <div class="topbar">
         <nav aria-label="Breadcrumb">
             <a class="back" href="{{ route('ai-tests.index') }}">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
+                <x-ai-tests::chevron direction="previous" />
                 All results
             </a>
         </nav>
@@ -146,13 +137,13 @@
                         aria-keyshortcuts="k"
                         title="Previous test: {{ $navigation->previous->title() }} (K)"
                     >
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
+                        <x-ai-tests::chevron direction="previous" />
                         <span class="pager-dot is-{{ $navigation->previous->status() }}" aria-hidden="true"></span>
                         <span class="pager-title">{{ $navigation->previous->title() }}</span>
                     </a>
                 @else
                     <span class="pager-link is-disabled" aria-hidden="true">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
+                        <x-ai-tests::chevron direction="previous" />
                     </span>
                 @endif
 
@@ -169,11 +160,11 @@
                     >
                         <span class="pager-title">{{ $navigation->next->title() }}</span>
                         <span class="pager-dot is-{{ $navigation->next->status() }}" aria-hidden="true"></span>
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+                        <x-ai-tests::chevron direction="next" />
                     </a>
                 @else
                     <span class="pager-link is-disabled" aria-hidden="true">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg>
+                        <x-ai-tests::chevron direction="next" />
                     </span>
                 @endif
             </nav>
@@ -194,7 +185,7 @@
         </p>
 
         <dl class="facts">
-            @foreach ($facts as $label => $value)
+            @foreach ($result->facts() as $label => $value)
                 <div>
                     <dt>{{ $label }}</dt>
                     <dd @class(['is-path' => $label === 'Test file'])>{{ $value }}</dd>
@@ -210,12 +201,16 @@
     </header>
 
     @foreach ($turns as $turn)
-        @php($selectedRun = $turn->selectedRun())
+        @php
+            $selectedRun = $turn->selectedRun();
+            $failureGroups = $turn->failureGroups();
+            $crashedRuns = $turn->crashedRuns();
+        @endphp
         <section class="turn" id="turn-{{ $turn->number }}" aria-labelledby="turn-{{ $turn->number }}-heading">
             <div class="turn-header">
                 <h2 id="turn-{{ $turn->number }}-heading">Turn {{ $turn->number }}</h2>
                 @if ($turn->checks !== [])
-                    <span @class(['turn-summary', 'numeric', 'turn-summary-'.$turn->checksStatus()])>{{ count($turn->checks) - $turn->failingChecks() }} of {{ count($turn->checks) }} checks passed in every run</span>
+                    <span @class(['turn-summary', 'numeric', 'turn-summary-'.$turn->checksStatus()])>{{ $turn->checksPassedInEveryRun() }} of {{ count($turn->checks) }} checks passed in every run</span>
                 @endif
             </div>
 
@@ -247,11 +242,11 @@
                 </div>
             @endif
 
-            @if ($turn->failureGroups() !== [])
+            @if ($failureGroups !== [])
                 <div class="turn-block">
                     <h3>Failure reasons</h3>
                     <ul class="notes">
-                        @foreach ($turn->failureGroups() as $group)
+                        @foreach ($failureGroups as $group)
                             <li class="note-group">
                                 <p class="note-check">{!! $group['checkHtml'] !!}</p>
                                 <ul class="notes">
@@ -268,11 +263,11 @@
                 </div>
             @endif
 
-            @if ($turn->crashedRuns() !== [])
+            @if ($crashedRuns !== [])
                 <div class="turn-block">
                     <h3>Crashes</h3>
                     <ul class="notes">
-                        @foreach ($turn->crashedRuns() as $run)
+                        @foreach ($crashedRuns as $run)
                             <li class="note">
                                 <span class="run-label">Run {{ $run->number }}</span>
                                 <p class="crash">{{ $run->crash }}</p>
@@ -303,6 +298,7 @@
                     </div>
 
                     @foreach ($turn->runs as $run)
+                        @php($answerHtml = $run->answerHtml())
                         <section class="run" id="turn-{{ $turn->number }}-run-{{ $run->number }}" aria-label="Run {{ $run->number }}, {{ $run->status() }}">
                             <div class="run-header">
                                 <h4>Run {{ $run->number }}</h4>
@@ -341,8 +337,8 @@
                                 </div>
 
                                 <div class="answer prose run-section">
-                                    @if ($run->answerHtml() !== null)
-                                        {!! $run->answerHtml() !!}
+                                    @if ($answerHtml !== null)
+                                        {!! $answerHtml !!}
                                     @else
                                         <p class="muted">No answer text.</p>
                                     @endif
@@ -378,7 +374,7 @@
             @if ($navigation->previous)
                 <a class="pager-card" href="{{ route('ai-tests.show', $navigation->previous->slug) }}" rel="prev">
                     <span class="pager-card-label">
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
+                        <x-ai-tests::chevron direction="previous" />
                         Previous test
                     </span>
                     <span class="pager-card-title">
@@ -392,7 +388,7 @@
                 <a class="pager-card pager-card-next" href="{{ route('ai-tests.show', $navigation->next->slug) }}" rel="next">
                     <span class="pager-card-label">
                         Next test
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+                        <x-ai-tests::chevron direction="next" />
                     </span>
                     <span class="pager-card-title">
                         {{ $navigation->next->title() }}

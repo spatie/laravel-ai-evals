@@ -2,6 +2,8 @@
 
 namespace Spatie\LaravelAiTests\Viewer;
 
+use Illuminate\Support\Arr;
+
 class TurnSection
 {
     /**
@@ -36,11 +38,11 @@ class TurnSection
         );
     }
 
-    public function failingChecks(): int
+    public function checksPassedInEveryRun(): int
     {
         return count(array_filter(
             $this->checks,
-            fn (CheckRow $check): bool => in_array($check->status(), ['failed', 'partial'], true),
+            fn (CheckRow $check): bool => ! in_array($check->status(), ['failed', 'partial'], true),
         ));
     }
 
@@ -71,7 +73,7 @@ class TurnSection
             }
         }
 
-        $labels = array_map(fn (CheckRow $check): string => $check->label, $this->checks);
+        $labels = array_column($this->checks, 'label');
 
         uksort($groups, fn (string $a, string $b): int => $this->position($labels, $a) <=> $this->position($labels, $b));
 
@@ -96,12 +98,8 @@ class TurnSection
     {
         $reachedRuns = array_values(array_filter($this->runs, fn (RunSection $run): bool => ! $run->notReached));
 
-        foreach ($reachedRuns as $run) {
-            if (! $run->passed) {
-                return $run;
-            }
-        }
+        $failedRun = Arr::first($reachedRuns, fn (RunSection $run): bool => ! $run->passed);
 
-        return $reachedRuns[0] ?? $this->runs[0] ?? null;
+        return $failedRun ?? $reachedRuns[0] ?? $this->runs[0] ?? null;
     }
 }

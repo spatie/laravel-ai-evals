@@ -1,12 +1,11 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Results;
+namespace Spatie\LaravelAiTests\Viewer;
 
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
-use Spatie\LaravelAiTests\Viewer\TurnSection;
 use Symfony\Component\Yaml\Yaml;
 
 class ResultFile
@@ -55,6 +54,17 @@ class ResultFile
         }
 
         return $passed ? 'passed' : 'failed';
+    }
+
+    /** @return array<string, mixed> */
+    public function facts(): array
+    {
+        return array_filter([
+            'Model' => $this->get('model'),
+            'Judge' => $this->get('judge_model'),
+            'Seeder' => $this->get('seeder'),
+            'Test file' => $this->get('test_file'),
+        ]);
     }
 
     public function ranAt(): ?CarbonImmutable

@@ -3,7 +3,7 @@
 namespace Spatie\LaravelAiTests\Http\Controllers;
 
 use Illuminate\Contracts\View\View;
-use Spatie\LaravelAiTests\Results\ResultFile;
+use Spatie\LaravelAiTests\Viewer\ResultFile;
 use Spatie\LaravelAiTests\Viewer\ResultNavigation;
 
 class ShowResultController

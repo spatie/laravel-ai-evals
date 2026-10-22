@@ -3,7 +3,6 @@
 namespace Spatie\LaravelAiTests\Viewer;
 
 use Illuminate\Support\Collection;
-use Spatie\LaravelAiTests\Results\ResultFile;
 
 class ResultNavigation
 {

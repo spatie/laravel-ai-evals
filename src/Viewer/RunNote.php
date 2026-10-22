@@ -11,6 +11,17 @@ class RunNote
         public ?string $reason,
     ) {}
 
+    /** @param array<string, mixed> $data */
+    public static function fromData(int $run, array $data): self
+    {
+        return new self(
+            run: $run,
+            check: (string) ($data['check'] ?? ''),
+            passed: ($data['passed'] ?? false) === true,
+            reason: isset($data['reason']) ? (string) $data['reason'] : null,
+        );
+    }
+
     public function checkHtml(): string
     {
         return Html::withCode($this->check);

@@ -35,12 +35,7 @@ class RunSection
             )),
             answer: isset($data['answer']) ? (string) $data['answer'] : null,
             verdicts: array_values(array_map(
-                fn (mixed $verdict): RunNote => new RunNote(
-                    run: $number,
-                    check: (string) ($verdict['check'] ?? ''),
-                    passed: ($verdict['passed'] ?? false) === true,
-                    reason: isset($verdict['reason']) ? (string) $verdict['reason'] : null,
-                ),
+                fn (array $verdict): RunNote => RunNote::fromData($number, $verdict),
                 array_filter($verdicts, fn (mixed $verdict): bool => is_array($verdict)),
             )),
             notReached: ($data['not_reached'] ?? false) === true,

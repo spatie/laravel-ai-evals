@@ -33,9 +33,11 @@ class ToolCallRow
     /** @return array<int, string> */
     public function details(): array
     {
+        $showsStatus = $this->status !== null && ! in_array($this->status, ['completed', $this->approval], true);
+
         return array_values(array_filter([
             $this->approval,
-            $this->status !== null && ! in_array($this->status, ['completed', $this->approval], true) ? $this->status : null,
+            $showsStatus ? $this->status : null,
         ]));
     }
 }

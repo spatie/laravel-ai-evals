@@ -2,8 +2,8 @@
 
 use Illuminate\Support\Facades\File;
 use Spatie\LaravelAiTests\AiTest;
-use Spatie\LaravelAiTests\Results\ResultFile;
 use Spatie\LaravelAiTests\Tests\TestCase;
+use Spatie\LaravelAiTests\Viewer\ResultFile;
 use Symfony\Component\Yaml\Yaml;
 
 uses(TestCase::class)->in(__DIR__);
