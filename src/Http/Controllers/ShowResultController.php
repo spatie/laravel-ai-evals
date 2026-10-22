@@ -3,22 +3,25 @@
 namespace Spatie\LaravelAiTests\Http\Controllers;
 
 use Illuminate\Contracts\View\View;
-use Illuminate\Support\Facades\File;
 use Spatie\LaravelAiTests\Results\ResultFile;
+use Spatie\LaravelAiTests\Viewer\ResultNavigation;
 
 class ShowResultController
 {
     public function __invoke(string $slug): View
     {
-        $path = config('ai-tests.results_path')."/{$slug}.yaml";
+        $results = ResultFile::allIn(config('ai-tests.results_path'));
 
-        abort_unless(File::isFile($path), 404);
+        $index = $results->search(fn (ResultFile $result): bool => $result->slug === $slug);
 
-        $result = ResultFile::fromPath($path);
+        abort_if($index === false, 404);
+
+        $result = $results[$index];
 
         return view('ai-tests::show', [
             'result' => $result,
             'turns' => $result->turns(),
+            'navigation' => ResultNavigation::at($results, $index),
         ]);
     }
 }

@@ -84,6 +84,34 @@ it('renders every run of every turn, including a crash', function () {
         ->assertDontSee("<script>alert('answer')</script>", escape: false);
 });
 
+it('links to the neighbouring tests in the order of the list', function () {
+    writeResultFile('alpha', ['title' => 'Alpha', 'passed' => true]);
+    writeResultFile('beta', ['title' => 'Beta', 'passed' => true]);
+    writeResultFile('zulu', ['title' => 'Zulu', 'passed' => false]);
+
+    $this->get('/ai-tests')->assertSeeInOrder(['Tells a customer where their order is', 'Zulu', 'Alpha', 'Beta']);
+
+    $this->get('/ai-tests/alpha')
+        ->assertSeeInOrder(['Previous test: Zulu', '3 of 4', 'Next test: Beta'])
+        ->assertSee('href="http://localhost/ai-tests/zulu"', escape: false)
+        ->assertSee('href="http://localhost/ai-tests/beta"', escape: false);
+});
+
+it('only links forward from the first test and back from the last', function () {
+    writeResultFile('alpha', ['title' => 'Alpha', 'passed' => true]);
+    writeResultFile('zulu', ['title' => 'Zulu', 'passed' => false]);
+
+    $this->get('/ai-tests/tells-a-customer-where-their-order-is')
+        ->assertSeeInOrder(['1 of 3', 'Next test: Zulu'])
+        ->assertDontSee('Previous test:')
+        ->assertDontSee('rel="prev"', escape: false);
+
+    $this->get('/ai-tests/alpha')
+        ->assertSeeInOrder(['Previous test: Zulu', '3 of 3'])
+        ->assertDontSee('Next test:')
+        ->assertDontSee('rel="next"', escape: false);
+});
+
 it('returns a 404 for unknown or unsafe slugs', function (string $url) {
     $this->get($url)->assertNotFound();
 })->with([

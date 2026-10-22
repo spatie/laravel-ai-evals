@@ -4,6 +4,8 @@ namespace Spatie\LaravelAiTests\Results;
 
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\File;
 use Spatie\LaravelAiTests\Viewer\TurnSection;
 use Symfony\Component\Yaml\Yaml;
 
@@ -20,6 +22,18 @@ class ResultFile
         $data = Yaml::parseFile($path);
 
         return new self(basename($path, '.yaml'), is_array($data) ? $data : []);
+    }
+
+    /** @return Collection<int, self> */
+    public static function allIn(string $directory): Collection
+    {
+        return collect(File::glob($directory.'/*.yaml'))
+            ->map(fn (string $path): self => self::fromPath($path))
+            ->sortBy([
+                fn (self $a, self $b): int => ($a->status() !== 'failed') <=> ($b->status() !== 'failed'),
+                fn (self $a, self $b): int => strcasecmp($a->title(), $b->title()),
+            ])
+            ->values();
     }
 
     public function get(string $key): mixed

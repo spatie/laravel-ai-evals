@@ -10,8 +10,35 @@
 <x-ai-tests::layout :title="$result->title().' · AI test results'">
     @push('styles')
         <style>
-            .back { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; margin-bottom: 14px; font-size: 14px; }
+            .topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 14px; }
+            .back { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; font-size: 14px; white-space: nowrap; }
             .back svg { width: 14px; height: 14px; }
+
+            .pager { display: flex; align-items: stretch; min-width: 0; height: 32px; border: 1px solid var(--border-strong); border-radius: 8px; font-size: 13.5px; }
+            .pager-link { display: inline-flex; align-items: center; gap: 7px; min-width: 32px; padding: 0 10px; color: var(--muted); }
+            .pager-link:first-child { border-radius: 7px 0 0 7px; }
+            .pager-link:last-child { border-radius: 0 7px 7px 0; }
+            a.pager-link:hover { background: var(--surface); color: var(--text); text-decoration: none; }
+            .pager-link:focus-visible { outline-offset: -2px; }
+            .pager-link svg { flex: none; width: 14px; height: 14px; }
+            .pager-link.is-disabled { justify-content: center; opacity: 0.4; }
+            .pager-title { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .pager-position { display: inline-flex; align-items: center; padding: 0 12px; border-inline: 1px solid var(--border); color: var(--text); font-weight: 500; white-space: nowrap; }
+            .pager-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--meter-empty); }
+            .pager-dot.is-passed { background: var(--passed-fill); }
+            .pager-dot.is-failed { background: var(--failed-fill); }
+
+            .pager-footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 48px; }
+            .pager-card { display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border: 1px solid var(--border-strong); border-radius: 12px; color: var(--text); }
+            .pager-card:hover { background: var(--surface); text-decoration: none; }
+            .pager-card-next { grid-column: 2; align-items: flex-end; text-align: right; }
+            .pager-card-label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+            .pager-card-label svg { width: 12px; height: 12px; }
+            .pager-card-title { display: inline-flex; align-items: baseline; gap: 8px; font-weight: 500; overflow-wrap: anywhere; }
+            .pager-card-title .pager-dot { transform: translateY(-1px); }
+            .pager-hint { grid-column: 1 / -1; margin: 4px 0 0; color: var(--muted); font-size: 12.5px; text-align: center; }
+            .pager-hint kbd { display: inline-block; min-width: 18px; padding: 0 4px; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 4px; font: 500 11.5px/16px var(--mono); text-align: center; }
+            @media (hover: none) { .pager-hint { display: none; } }
             .result-header { padding-bottom: 24px; border-bottom: 1px solid var(--border); }
             .verdict { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 12px 0 0; }
             .verdict-runs { font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -89,16 +116,69 @@
                 .note { grid-template-columns: 1fr; gap: 0; }
                 .run-header, .run-section, .answer { padding-left: 12px; padding-right: 12px; }
                 .tab { padding-left: 10px; padding-right: 10px; }
+                .pager-footer { grid-template-columns: minmax(0, 1fr); }
+                .pager-card-next { grid-column: 1; }
+            }
+
+            @media (max-width: 720px) {
+                .pager-title, .pager-link .pager-dot { display: none; }
+                .pager-link { justify-content: center; padding: 0; }
             }
         </style>
     @endpush
 
-    <nav aria-label="Breadcrumb">
-        <a class="back" href="{{ route('ai-tests.index') }}">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
-            All results
-        </a>
-    </nav>
+    <div class="topbar">
+        <nav aria-label="Breadcrumb">
+            <a class="back" href="{{ route('ai-tests.index') }}">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
+                All results
+            </a>
+        </nav>
+
+        @if ($navigation->total > 1)
+            <nav class="pager" aria-label="Tests">
+                @if ($navigation->previous)
+                    <a
+                        class="pager-link"
+                        href="{{ route('ai-tests.show', $navigation->previous->slug) }}"
+                        rel="prev"
+                        aria-label="Previous test: {{ $navigation->previous->title() }}"
+                        aria-keyshortcuts="k"
+                        title="Previous test: {{ $navigation->previous->title() }} (K)"
+                    >
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
+                        <span class="pager-dot is-{{ $navigation->previous->status() }}" aria-hidden="true"></span>
+                        <span class="pager-title">{{ $navigation->previous->title() }}</span>
+                    </a>
+                @else
+                    <span class="pager-link is-disabled" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
+                    </span>
+                @endif
+
+                <span class="pager-position numeric"><span class="visually-hidden">Test&nbsp;</span>{{ $navigation->position }} of {{ $navigation->total }}</span>
+
+                @if ($navigation->next)
+                    <a
+                        class="pager-link"
+                        href="{{ route('ai-tests.show', $navigation->next->slug) }}"
+                        rel="next"
+                        aria-label="Next test: {{ $navigation->next->title() }}"
+                        aria-keyshortcuts="j"
+                        title="Next test: {{ $navigation->next->title() }} (J)"
+                    >
+                        <span class="pager-title">{{ $navigation->next->title() }}</span>
+                        <span class="pager-dot is-{{ $navigation->next->status() }}" aria-hidden="true"></span>
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+                    </a>
+                @else
+                    <span class="pager-link is-disabled" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg>
+                    </span>
+                @endif
+            </nav>
+        @endif
+    </div>
 
     <header class="result-header">
         <h1>{{ $result->title() }}</h1>
@@ -292,6 +372,62 @@
             @endif
         </section>
     @endforeach
+
+    @if ($navigation->previous || $navigation->next)
+        <nav class="pager-footer" aria-label="Previous and next test">
+            @if ($navigation->previous)
+                <a class="pager-card" href="{{ route('ai-tests.show', $navigation->previous->slug) }}" rel="prev">
+                    <span class="pager-card-label">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
+                        Previous test
+                    </span>
+                    <span class="pager-card-title">
+                        <span class="pager-dot is-{{ $navigation->previous->status() }}" aria-hidden="true"></span>
+                        {{ $navigation->previous->title() }}
+                    </span>
+                </a>
+            @endif
+
+            @if ($navigation->next)
+                <a class="pager-card pager-card-next" href="{{ route('ai-tests.show', $navigation->next->slug) }}" rel="next">
+                    <span class="pager-card-label">
+                        Next test
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+                    </span>
+                    <span class="pager-card-title">
+                        {{ $navigation->next->title() }}
+                        <span class="pager-dot is-{{ $navigation->next->status() }}" aria-hidden="true"></span>
+                    </span>
+                </a>
+            @endif
+
+            <p class="pager-hint">Press <kbd>J</kbd> for the next test and <kbd>K</kbd> for the previous one.</p>
+        </nav>
+    @endif
+
+    @push('scripts')
+        <script>
+            document.addEventListener('keydown', (event) => {
+                const relations = { j: 'next', k: 'prev' };
+                const isTyping = event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])');
+
+                if (! relations[event.key] || event.defaultPrevented || event.isComposing || isTyping) {
+                    return;
+                }
+
+                if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+                    return;
+                }
+
+                const link = document.querySelector(`.pager a[rel="${relations[event.key]}"]`);
+
+                if (link) {
+                    event.preventDefault();
+                    link.click();
+                }
+            });
+        </script>
+    @endpush
 
     @push('scripts')
         <script>
