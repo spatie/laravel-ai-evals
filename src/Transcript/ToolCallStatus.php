@@ -8,4 +8,5 @@ enum ToolCallStatus: string
     case Failed = 'failed';
     case Rejected = 'rejected';
     case Pending = 'pending';
+    case NoResult = 'no_result';
 }

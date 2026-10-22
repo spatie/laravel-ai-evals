@@ -37,7 +37,7 @@ class ToolCallRow
 
         return array_values(array_filter([
             $this->approval,
-            $showsStatus ? $this->status : null,
+            $showsStatus ? str_replace('_', ' ', (string) $this->status) : null,
         ]));
     }
 }

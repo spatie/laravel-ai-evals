@@ -6,7 +6,7 @@ class ToolCallRecord
 {
     public ?string $result = null;
 
-    public ToolCallStatus $status = ToolCallStatus::Completed;
+    public ToolCallStatus $status = ToolCallStatus::NoResult;
 
     public ?bool $approved = null;
 
