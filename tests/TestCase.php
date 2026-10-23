@@ -4,6 +4,7 @@ namespace Spatie\LaravelAiTests\Tests;
 
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 use Laravel\Ai\AiServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 use Spatie\LaravelAiTests\LaravelAiTestsServiceProvider;
@@ -15,6 +16,8 @@ class TestCase extends Orchestra
         parent::setUp();
 
         Http::preventStrayRequests();
+
+        Process::preventStrayProcesses();
 
         File::deleteDirectory(config('ai-tests.results_path'));
     }

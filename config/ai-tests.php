@@ -11,8 +11,19 @@ return [
 
     'judge' => [
         'agent' => JudgeAgent::class,
+        'runner' => env('AI_TESTS_JUDGE_RUNNER', 'agent'),
         'provider' => env('AI_TESTS_JUDGE_PROVIDER'),
         'model' => env('AI_TESTS_JUDGE_MODEL'),
+        'claude' => [
+            'binary' => env('AI_TESTS_JUDGE_CLAUDE_BINARY', 'claude'),
+            'model' => env('AI_TESTS_JUDGE_CLAUDE_MODEL'),
+            'timeout' => 300,
+        ],
+        'codex' => [
+            'binary' => env('AI_TESTS_JUDGE_CODEX_BINARY', 'codex'),
+            'model' => env('AI_TESTS_JUDGE_CODEX_MODEL'),
+            'timeout' => 300,
+        ],
     ],
 
     'viewer' => [

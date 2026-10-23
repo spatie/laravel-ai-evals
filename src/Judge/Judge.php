@@ -3,9 +3,12 @@
 namespace Spatie\LaravelAiTests\Judge;
 
 use Laravel\Ai\Contracts\Agent;
-use Laravel\Ai\Responses\StructuredAgentResponse;
 use LogicException;
 use Spatie\LaravelAiTests\Checks\RubricCriterion;
+use Spatie\LaravelAiTests\Judge\Runners\AgentJudgeRunner;
+use Spatie\LaravelAiTests\Judge\Runners\ClaudeJudgeRunner;
+use Spatie\LaravelAiTests\Judge\Runners\CodexJudgeRunner;
+use Spatie\LaravelAiTests\Judge\Runners\JudgeRunner;
 use Spatie\LaravelAiTests\Results\CheckOutcome;
 use Spatie\LaravelAiTests\Transcript\ToolCallRecord;
 use Spatie\LaravelAiTests\Transcript\Transcript;
@@ -22,19 +25,12 @@ class Judge
             return new JudgeResult([]);
         }
 
-        $agent = $this->agent();
-
-        $response = $agent->prompt(
+        $output = $this->runner()->run(
+            $this->agent(),
             $this->prompt($rubric, $transcript, $earlierTurns),
-            provider: config('ai-tests.judge.provider'),
-            model: config('ai-tests.judge.model'),
         );
 
-        if (! $response instanceof StructuredAgentResponse) {
-            throw new LogicException('The judge agent '.$agent::class.' must have structured output.');
-        }
-
-        $verdicts = collect($response['verdicts'] ?? [])->keyBy('criterion');
+        $verdicts = collect($output->verdicts)->keyBy('criterion');
 
         $outcomes = array_map(
             fn (RubricCriterion $criterion, int $index): CheckOutcome => $this->outcome($criterion, $verdicts->get($index + 1)),
@@ -42,12 +38,24 @@ class Judge
             array_keys(array_values($rubric)),
         );
 
-        return new JudgeResult($outcomes, $response->meta->model);
+        return new JudgeResult($outcomes, $output->model);
     }
 
     protected function agent(): Agent
     {
         return app(config('ai-tests.judge.agent'));
+    }
+
+    protected function runner(): JudgeRunner
+    {
+        $runner = config('ai-tests.judge.runner') ?: 'agent';
+
+        return match ($runner) {
+            'agent' => app(AgentJudgeRunner::class),
+            'claude' => app(ClaudeJudgeRunner::class),
+            'codex' => app(CodexJudgeRunner::class),
+            default => throw new LogicException("The judge runner \"{$runner}\" does not exist. Use agent, claude or codex."),
+        };
     }
 
     /**
