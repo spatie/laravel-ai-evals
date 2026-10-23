@@ -113,6 +113,7 @@ aiTest('cancels an order after confirmation')
 | `expectMentionsInOrder()` | Values the answer must contain in this order. |
 | `expectNotMentions()` | Values the answer must not contain, in any letter case, such as an outdated term. |
 | `expectRubric()` | One or more criteria for the LLM judge. |
+| `expectThat()` | A check written in code, with a label. See [checking with code](#checking-with-code). |
 | `approveAll()` | Approves every tool call that waits for approval in this turn. Without it, they are rejected. |
 
 Tool checks count every tool call of the turn, including the calls after an approval. A tool class is matched by its `name()`, or by its class name when it has no public `name()` method. Tool names are resolved before the first run, so a tool class the container can't build fails the test right away. Words are tokens with at least one letter or digit, so Markdown bullets do not count. A mention is a case-sensitive match anywhere in the answer of the turn. For `expectMentionsInOrder()`, the first mention of each value must come after the first mention of the value before it. Unlike the other mention checks, `expectNotMentions()` ignores case, so `error group` also catches "Error groups", and its failure quotes the text it found. Write rubric criteria as concrete, checkable statements. A vague criterion gives noisy results. The judge grades one turn at a time. For a later turn, it also gets the earlier turns of the run (their prompts, tool calls without results, and answers) as context, so a criterion can refer to "those orders", but only the current turn is graded.
@@ -196,6 +197,33 @@ aiTest('uses the current terminology')
     ->user('Which of my orders need attention?')
     ->expectNotMentions('shipment group', 'parcel set');
 ```
+
+### Checking with code
+
+When a check needs more than the answer, such as the exact arguments of a tool call or the rows a tool changed, write it in code with `expectThat()`. Give it a label and a closure:
+
+```php
+use Spatie\LaravelAiTests\Transcript\Transcript;
+
+aiTest('cancels only the late orders')
+    ->driver(fn () => ShopDriver::seeded())
+    ->user('Cancel all my late orders.')
+    ->approveAll()
+    ->expectThat('Cancels exactly the late orders', function (ShopDriver $driver) {
+        $cancelled = $driver->seeder->customer->orders()->where('status', 'cancelled')->pluck('number')->all();
+
+        return $cancelled === ['A-1', 'A-3'] ?: 'Cancelled '.implode(', ', $cancelled).'.';
+    })
+    ->expectThat('Looks up each order once', function (Transcript $transcript) {
+        $orders = array_column(array_column($transcript->toolCalls, 'arguments'), 'order');
+
+        return count($orders) === count(array_unique($orders));
+    });
+```
+
+The closure receives the driver and the `Transcript` of the turn, by their class or as `$driver` and `$transcript`. The transcript has the prompt, the tool calls with their arguments, result, status and approval (`$transcript->toolCalls`), and the answer (`$transcript->answer()`). Return `true` to pass, `false` to fail, or a string to fail with that string as the reason. When the closure throws an exception, for example a failed `expect()`, the check fails with the message of the exception. The run goes on.
+
+Unlike the other closures, this one runs in every run, right after the turn and before the database transaction of the run is rolled back. It sees the rows the run created or changed. It runs in a nested transaction, so a failed query does not break the rest of the run. In the result file and the viewer, the check shows with its label and kind `code`, like the other checks.
 
 ## Drivers
 

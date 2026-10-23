@@ -80,13 +80,14 @@ class Runner
         return $driver;
     }
 
-    protected function callWithDriver(mixed $value, Driver $driver): mixed
+    /** @param array<string, mixed> $parameters */
+    protected function callWithDriver(mixed $value, Driver $driver, array $parameters = []): mixed
     {
         if (! $value instanceof Closure) {
             return $value;
         }
 
-        return app()->call($value, [$driver::class => $driver, 'driver' => $driver]);
+        return app()->call($value, [...$parameters, $driver::class => $driver, 'driver' => $driver]);
     }
 
     /** @return array<int, array<int, Expectation>> */
@@ -95,7 +96,7 @@ class Runner
         try {
             return array_map(
                 fn (Turn $turn): array => $this->ensureLabelled(
-                    $turn->resolveExpectations(fn (mixed $value): mixed => $this->callWithDriver($value, $driver)),
+                    $turn->resolveExpectations(fn (mixed $value, array $parameters = []): mixed => $this->callWithDriver($value, $driver, $parameters)),
                 ),
                 $aiTest->turns,
             );

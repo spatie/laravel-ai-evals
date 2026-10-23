@@ -7,6 +7,7 @@ use Illuminate\Support\Arr;
 use LogicException;
 use Spatie\LaravelAiTests\Checks\CallsToolCheck;
 use Spatie\LaravelAiTests\Checks\Check;
+use Spatie\LaravelAiTests\Checks\ClosureCheck;
 use Spatie\LaravelAiTests\Checks\DoesNotCallToolCheck;
 use Spatie\LaravelAiTests\Checks\DoesNotMentionCheck;
 use Spatie\LaravelAiTests\Checks\Expectation;
@@ -15,12 +16,13 @@ use Spatie\LaravelAiTests\Checks\MaxWordsCheck;
 use Spatie\LaravelAiTests\Checks\MentionsCheck;
 use Spatie\LaravelAiTests\Checks\MentionsInOrderCheck;
 use Spatie\LaravelAiTests\Checks\RubricCriterion;
+use Spatie\LaravelAiTests\Transcript\Transcript;
 
 class Turn
 {
     public bool $approvesAll = false;
 
-    /** @var array<int, Closure(Closure(mixed): mixed): array<int, Expectation>> */
+    /** @var array<int, Closure(Closure(mixed, array<string, mixed>=): mixed): array<int, Expectation>> */
     protected array $expectationFactories = [];
 
     public function __construct(
@@ -111,8 +113,20 @@ class Turn
         return $this;
     }
 
+    public function expectThat(string $label, Closure $check): static
+    {
+        $this->expectationFactories[] = fn (Closure $resolve): array => [
+            new ClosureCheck(
+                $label,
+                fn (Transcript $transcript): mixed => $resolve($check, [Transcript::class => $transcript, 'transcript' => $transcript]),
+            ),
+        ];
+
+        return $this;
+    }
+
     /**
-     * @param  Closure(mixed): mixed  $resolve
+     * @param  Closure(mixed, array<string, mixed>=): mixed  $resolve
      * @return array<int, Expectation>
      */
     public function resolveExpectations(Closure $resolve): array
