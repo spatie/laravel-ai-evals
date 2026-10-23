@@ -7,6 +7,8 @@ return [
 
     'runs' => 3,
 
+    'forced_runs' => env('AI_TESTS_RUNS'),
+
     'min_pass_rate' => 0.66,
 
     'judge' => [

@@ -104,7 +104,7 @@ aiTest('cancels an order after confirmation')
 | Method | Behaviour |
 | --- | --- |
 | `driver()` | How the turns reach your agent. Pass a driver, or a closure that sets up the test data and returns one. |
-| `runs()` | Number of fresh conversations. Defaults to `ai-tests.runs`. |
+| `runs()` | Number of fresh conversations. Defaults to `ai-tests.runs`. `ai-tests.forced_runs` overrides it. |
 | `minPassRate()` | Minimum share of passing runs. Defaults to `ai-tests.min_pass_rate`. |
 | `user()` | Starts a turn with this message. Pass a closure that receives the driver when the message depends on the test data. |
 | `expectTools()` | Tool classes or tool names that must or must not be called, and a maximum number of calls. |
@@ -303,6 +303,14 @@ vendor/bin/pest --group=ai --filter="cancels an order"
 
 When a test is below its minimum pass rate, it fails with a message that points to its result file.
 
+To save time and money while you work on a test, run it once. `AI_TESTS_RUNS` sets `ai-tests.forced_runs`, which overrides the number of runs of every test, including tests that call `runs()`:
+
+```bash
+AI_TESTS_RUNS=1 vendor/bin/pest --group=ai --filter="cancels an order"
+```
+
+The minimum pass rate still applies, so the test passes or fails on that one run. The result file is written as usual, and its `runs` shows that it was a quick run. Run the test with its full number of runs before you commit the result.
+
 ## Results
 
 Every test writes `<results_path>/<slug>.yaml`, where the slug is `Str::slug()` of the description. A new run overwrites the file. Commit the result files, so a diff shows how a prompt or tool change moved the results.
@@ -391,6 +399,8 @@ return [
     'results_path' => base_path('tests/AiTests/results'),
 
     'runs' => 3,
+
+    'forced_runs' => env('AI_TESTS_RUNS'),
 
     'min_pass_rate' => 0.66,
 

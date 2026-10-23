@@ -428,6 +428,30 @@ it('compares the minimum pass rate with the unrounded pass rate', function () {
     expect(fn () => $aiTest->execute())->toThrow(AssertionFailedError::class, '2/3 runs passed');
 });
 
+it('forces the number of runs over the runs of the test', function () {
+    config(['ai-tests.forced_runs' => '1']);
+
+    SupportAgent::fake(['Shipped.', 'Shipped yesterday afternoon by courier.']);
+
+    $aiTest = makeAiTest('runs once');
+
+    $aiTest
+        ->driver(new AgentDriver(SupportAgent::class))
+        ->runs(3)
+        ->minPassRate(1)
+        ->user('Where is my order?')
+        ->expectMaxWords(2);
+
+    $aiTest->execute();
+
+    expect(resultFile('runs-once')->data)->toMatchArray([
+        'runs' => 1,
+        'passed_runs' => 1,
+        'pass_rate' => 1.0,
+        'passed' => true,
+    ]);
+});
+
 it('refuses an invalid number of runs or minimum pass rate', function (int $runs, float $minPassRate, string $message) {
     $aiTest = makeAiTest('is misconfigured');
 

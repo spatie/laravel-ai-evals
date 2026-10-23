@@ -68,6 +68,12 @@ class AiTest
 
     public function runCount(): int
     {
+        $forcedRuns = config('ai-tests.forced_runs');
+
+        if ($forcedRuns !== null && $forcedRuns !== '') {
+            return (int) $forcedRuns;
+        }
+
         return (int) ($this->runs ?? config('ai-tests.runs'));
     }
 
