@@ -368,8 +368,19 @@ return [
 
     'judge' => [
         'agent' => JudgeAgent::class,
+        'runner' => env('AI_TESTS_JUDGE_RUNNER', 'agent'),
         'provider' => env('AI_TESTS_JUDGE_PROVIDER'),
         'model' => env('AI_TESTS_JUDGE_MODEL'),
+        'claude' => [
+            'binary' => env('AI_TESTS_JUDGE_CLAUDE_BINARY', 'claude'),
+            'model' => env('AI_TESTS_JUDGE_CLAUDE_MODEL'),
+            'timeout' => 300,
+        ],
+        'codex' => [
+            'binary' => env('AI_TESTS_JUDGE_CODEX_BINARY', 'codex'),
+            'model' => env('AI_TESTS_JUDGE_CODEX_MODEL'),
+            'timeout' => 300,
+        ],
     ],
 
     'viewer' => [
@@ -380,6 +391,29 @@ return [
 ```
 
 The judge uses your default Laravel AI provider and model unless you set them. To give the judge context about your product, extend `Spatie\LaravelAiTests\Judge\JudgeAgent`, override `instructions()`, and set your class as `judge.agent`.
+
+### Judging with a local CLI
+
+The judge can also run through [Claude Code](https://code.claude.com) or [Codex](https://developers.openai.com/codex/cli) on your machine instead of the API. You then judge with your own subscription, and with a different model than the agent under test. Only the judge changes. The agent under test still runs through its driver.
+
+```bash
+AI_TESTS_JUDGE_RUNNER=claude AI_TESTS_JUDGE_CLAUDE_MODEL=opus vendor/bin/pest --group=ai
+AI_TESTS_JUDGE_RUNNER=codex vendor/bin/pest --group=ai
+```
+
+The CLI gets the instructions and the JSON schema of your `judge.agent` class and the same prompt, so a custom judge agent works unchanged. `judge.provider` and `judge.model` only apply to the `agent` runner. Without a model, the CLI uses its default. `judge_model` in the result file names the model and the CLI, such as `claude-opus-5-5 via Claude Code`. A non-zero exit or output that does not match the schema becomes a `judge_error`, like an API error.
+
+Every judge call starts a new CLI process in a new empty temporary directory, which is deleted afterwards. The prompt goes in through stdin.
+
+Claude Code runs as `claude --print --output-format json --json-schema <schema> --system-prompt <instructions> --tools "" --strict-mcp-config --setting-sources "" --safe-mode --disable-slash-commands --no-session-persistence [--model <model>]`. The system prompt replaces the Claude Code one. `--tools ""` removes the built-in tools, `--strict-mcp-config` loads no MCP servers, `--setting-sources ""` skips user, project and local settings, `--safe-mode` turns off CLAUDE.md files, skills, plugins and hooks, and `--no-session-persistence` keeps the session off disk. Managed (policy) settings still apply. Claude Code still adds a short environment block, such as the working directory and the date.
+
+Codex runs as `codex exec --ephemeral --skip-git-repo-check --ignore-user-config --ignore-rules --sandbox read-only --cd <empty directory> --config model_instructions_file=<instructions> --output-schema <schema> --output-last-message <file> [--model <model>] -`, with these extra options:
+
+- `--config project_doc_max_bytes=0` skips `AGENTS.md` files in the working directory and its parents.
+- `--config skills.include_instructions=false`, `--config include_apps_instructions=false` and `--config include_environment_context=false` leave out the skill list, the apps instructions and the environment description.
+- `--config web_search="disabled"` and `--disable` for `shell_tool`, `unified_exec`, `code_mode_host`, `multi_agent`, `apps`, `plugins`, `hooks` and `image_generation` remove the tools.
+
+`--ignore-user-config` skips `config.toml`, with its MCP servers and its default model. Codex can't fully isolate the judge: it still reads the global `$CODEX_HOME/AGENTS.md` and still offers a few built-in tools. Commands can't run, and the sandbox is read-only. To also drop the global `AGENTS.md`, point `CODEX_HOME` at a separate directory where you ran `codex login`. Codex feature names change between versions, so a newer or older Codex can reject an option. The judge error then shows why.
 
 ## Testing
 
