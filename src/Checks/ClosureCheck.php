@@ -1,11 +1,11 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Checks;
+namespace Spatie\LaravelAiEvals\Checks;
 
 use Closure;
 use Illuminate\Support\Facades\DB;
-use Spatie\LaravelAiTests\Results\CheckOutcome;
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiEvals\Results\CheckOutcome;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 use Throwable;
 
 class ClosureCheck extends Check
@@ -21,24 +21,19 @@ class ClosureCheck extends Check
         return $this->label;
     }
 
-    public function kind(): ExpectationKind
-    {
-        return ExpectationKind::Code;
-    }
-
     public function evaluate(Transcript $transcript): CheckOutcome
     {
         try {
             $result = DB::transaction(fn (): mixed => ($this->check)($transcript));
         } catch (Throwable $exception) {
-            return new CheckOutcome($this, passed: false, reason: $exception->getMessage());
+            return new CheckOutcome($this->label, passed: false, reason: $exception::class.': '.$exception->getMessage());
         }
 
         return match (true) {
-            $result === true => new CheckOutcome($this, passed: true),
-            $result === false => new CheckOutcome($this, passed: false),
-            is_string($result) => new CheckOutcome($this, passed: false, reason: $result),
-            default => new CheckOutcome($this, passed: false, reason: 'Returned '.get_debug_type($result).' instead of true, false or a failure reason.'),
+            $result === true => new CheckOutcome($this->label, passed: true),
+            $result === false => new CheckOutcome($this->label, passed: false),
+            is_string($result) => new CheckOutcome($this->label, passed: false, reason: $result),
+            default => new CheckOutcome($this->label, passed: false, reason: 'Returned '.get_debug_type($result).' instead of true, false or a failure reason.'),
         };
     }
 }

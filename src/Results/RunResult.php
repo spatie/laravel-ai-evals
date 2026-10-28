@@ -1,8 +1,8 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Results;
+namespace Spatie\LaravelAiEvals\Results;
 
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 
 class RunResult
 {
@@ -13,14 +13,10 @@ class RunResult
 
     public ?Transcript $crashedTurn = null;
 
-    public function __construct(
-        public int $number,
-    ) {}
-
     public function passed(): bool
     {
         return $this->crash === null
-            && collect($this->turns)->every(fn (TurnResult $turn): bool => $turn->passed());
+            && array_filter($this->turns, fn (TurnResult $turn): bool => ! $turn->passed()) === [];
     }
 
     public function unjudged(): bool
@@ -29,23 +25,7 @@ class RunResult
             return false;
         }
 
-        $turns = collect($this->turns);
-
-        return ! $turns->contains(fn (TurnResult $turn): bool => $turn->failed())
-            && $turns->contains(fn (TurnResult $turn): bool => $turn->unjudged());
-    }
-
-    /** @return array<int, string> */
-    public function errors(): array
-    {
-        $errors = $this->crash !== null ? ["Run {$this->number} crashed: {$this->crash}"] : [];
-
-        foreach ($this->turns as $index => $turn) {
-            if ($turn->judgeError !== null) {
-                $errors[] = "The judge failed on run {$this->number}, turn ".($index + 1).": {$turn->judgeError}";
-            }
-        }
-
-        return $errors;
+        return array_filter($this->turns, fn (TurnResult $turn): bool => $turn->failed()) === []
+            && array_filter($this->turns, fn (TurnResult $turn): bool => $turn->unjudged()) !== [];
     }
 }

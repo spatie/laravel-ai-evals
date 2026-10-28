@@ -1,9 +1,9 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Checks;
+namespace Spatie\LaravelAiEvals\Checks;
 
-use Spatie\LaravelAiTests\Results\CheckOutcome;
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiEvals\Results\CheckOutcome;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 
 class MaxWordsCheck extends Check
 {
@@ -16,21 +16,10 @@ class MaxWordsCheck extends Check
         return "At most {$this->maxWords} words";
     }
 
-    public function kind(): ExpectationKind
-    {
-        return ExpectationKind::MaxWords;
-    }
-
     public function evaluate(Transcript $transcript): CheckOutcome
     {
         $wordCount = $transcript->wordCount();
 
-        $passed = $wordCount <= $this->maxWords;
-
-        return new CheckOutcome(
-            expectation: $this,
-            passed: $passed,
-            reason: $passed ? null : "Answered in {$wordCount} words.",
-        );
+        return $this->outcome($wordCount <= $this->maxWords, "Answered in {$wordCount} words.");
     }
 }

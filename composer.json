@@ -1,16 +1,18 @@
 {
-    "name": "spatie/laravel-ai-tests",
-    "description": "Test your Laravel AI agents against real models",
+    "name": "spatie/laravel-ai-evals",
+    "description": "Evaluate multi-turn conversations with your Laravel AI agents against real models in Pest",
     "keywords": [
         "spatie",
         "laravel",
         "laravel-ai",
         "ai",
         "evals",
-        "testing",
-        "laravel-ai-tests"
+        "pest",
+        "pest-plugin",
+        "llm",
+        "laravel-ai-evals"
     ],
-    "homepage": "https://github.com/spatie/laravel-ai-tests",
+    "homepage": "https://github.com/spatie/laravel-ai-evals",
     "license": "MIT",
     "authors": [
         {
@@ -26,8 +28,7 @@
         "illuminate/support": "^12.0||^13.0",
         "laravel/ai": "^1.1",
         "pestphp/pest": "^4.0||^5.0",
-        "spatie/laravel-package-tools": "^1.16",
-        "symfony/yaml": "^7.3||^8.0"
+        "pestphp/pest-plugin": "^4.0||^5.0"
     },
     "require-dev": {
         "larastan/larastan": "^3.0",
@@ -43,15 +44,15 @@
     },
     "autoload": {
         "psr-4": {
-            "Spatie\\LaravelAiTests\\": "src/"
+            "Spatie\\LaravelAiEvals\\": "src/"
         },
         "files": [
-            "src/helpers.php"
+            "src/Autoload.php"
         ]
     },
     "autoload-dev": {
         "psr-4": {
-            "Spatie\\LaravelAiTests\\Tests\\": "tests/"
+            "Spatie\\LaravelAiEvals\\Tests\\": "tests/"
         }
     },
     "scripts": {
@@ -70,9 +71,9 @@
         }
     },
     "extra": {
-        "laravel": {
-            "providers": [
-                "Spatie\\LaravelAiTests\\LaravelAiTestsServiceProvider"
+        "pest": {
+            "plugins": [
+                "Spatie\\LaravelAiEvals\\Plugin"
             ]
         }
     },

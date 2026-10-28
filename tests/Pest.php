@@ -1,34 +1,35 @@
 <?php
 
-use Illuminate\Support\Facades\File;
-use Spatie\LaravelAiTests\AiTest;
-use Spatie\LaravelAiTests\Tests\TestCase;
-use Spatie\LaravelAiTests\Viewer\ResultFile;
-use Symfony\Component\Yaml\Yaml;
+use PHPUnit\Framework\AssertionFailedError;
+use Spatie\LaravelAiEvals\Evaluation;
+use Spatie\LaravelAiEvals\Results\CheckOutcome;
+use Spatie\LaravelAiEvals\Results\EvaluationResult;
+use Spatie\LaravelAiEvals\Runner;
+use Spatie\LaravelAiEvals\Tests\TestCase;
 
 uses(TestCase::class)->in(__DIR__);
 
-function makeAiTest(string $description): AiTest
+function runEvaluation(Evaluation $evaluation): EvaluationResult
 {
-    return new AiTest($description, __FILE__);
+    return app(Runner::class)->run($evaluation);
 }
 
-function resultFile(string $slug): ResultFile
+/** @return array<int, array{0: string, 1: bool, 2: ?string}> */
+function outcomes(EvaluationResult $result, int $run = 1, int $turn = 1): array
 {
-    return ResultFile::fromPath(config('ai-tests.results_path')."/{$slug}.yaml");
+    return array_map(
+        fn (CheckOutcome $outcome) => [$outcome->label, $outcome->passed, $outcome->reason],
+        $result->runs[$run - 1]->turns[$turn - 1]->outcomes,
+    );
 }
 
-/** @param array<string, mixed> $data */
-function writeResultFile(string $slug, array $data): void
+function failureMessage(Evaluation $evaluation): string
 {
-    File::put(config('ai-tests.results_path')."/{$slug}.yaml", Yaml::dump($data));
-}
+    try {
+        $evaluation->execute();
+    } catch (AssertionFailedError $exception) {
+        return $exception->getMessage();
+    }
 
-/**
- * @param  array<string, mixed>  $turn
- * @return array<int, array{0: string, 1: string, 2: int}>
- */
-function checkSummaries(array $turn): array
-{
-    return array_map(fn (array $check) => [$check['label'], $check['kind'], $check['passed_runs']], $turn['checks']);
+    throw new RuntimeException("The evaluation \"{$evaluation->description}\" passed.");
 }

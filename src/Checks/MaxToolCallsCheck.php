@@ -1,9 +1,9 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Checks;
+namespace Spatie\LaravelAiEvals\Checks;
 
-use Spatie\LaravelAiTests\Results\CheckOutcome;
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiEvals\Results\CheckOutcome;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 
 class MaxToolCallsCheck extends Check
 {
@@ -16,21 +16,10 @@ class MaxToolCallsCheck extends Check
         return "At most {$this->maxCalls} tool calls";
     }
 
-    public function kind(): ExpectationKind
-    {
-        return ExpectationKind::Tool;
-    }
-
     public function evaluate(Transcript $transcript): CheckOutcome
     {
         $callCount = count($transcript->toolCalls);
 
-        $passed = $callCount <= $this->maxCalls;
-
-        return new CheckOutcome(
-            expectation: $this,
-            passed: $passed,
-            reason: $passed ? null : "Made {$callCount} tool calls.",
-        );
+        return $this->outcome($callCount <= $this->maxCalls, "Made {$callCount} tool calls.");
     }
 }

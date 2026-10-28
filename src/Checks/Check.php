@@ -1,14 +1,19 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Checks;
+namespace Spatie\LaravelAiEvals\Checks;
 
 use Illuminate\Support\Str;
-use Spatie\LaravelAiTests\Results\CheckOutcome;
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiEvals\Results\CheckOutcome;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 
 abstract class Check implements Expectation
 {
     abstract public function evaluate(Transcript $transcript): CheckOutcome;
+
+    protected function outcome(bool $passed, string $failureReason): CheckOutcome
+    {
+        return new CheckOutcome($this->label(), $passed, $passed ? null : $failureReason);
+    }
 
     protected static function quote(string $value): string
     {

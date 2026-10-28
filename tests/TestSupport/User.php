@@ -1,6 +1,6 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Tests\TestSupport;
+namespace Spatie\LaravelAiEvals\Tests\TestSupport;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
 

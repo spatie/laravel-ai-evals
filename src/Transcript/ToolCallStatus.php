@@ -1,6 +1,6 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Transcript;
+namespace Spatie\LaravelAiEvals\Transcript;
 
 enum ToolCallStatus: string
 {
@@ -9,4 +9,9 @@ enum ToolCallStatus: string
     case Rejected = 'rejected';
     case Pending = 'pending';
     case NoResult = 'no_result';
+
+    public function label(): string
+    {
+        return str_replace('_', ' ', $this->value);
+    }
 }

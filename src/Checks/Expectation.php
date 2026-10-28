@@ -1,10 +1,8 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Checks;
+namespace Spatie\LaravelAiEvals\Checks;
 
 interface Expectation
 {
     public function label(): string;
-
-    public function kind(): ExpectationKind;
 }

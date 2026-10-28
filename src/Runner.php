@@ -1,23 +1,23 @@
 <?php
 
-namespace Spatie\LaravelAiTests;
+namespace Spatie\LaravelAiEvals;
 
-use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Approvals\PendingApproval;
+use Laravel\Ai\Contracts\Agent;
 use LogicException;
-use Spatie\LaravelAiTests\Checks\Check;
-use Spatie\LaravelAiTests\Checks\Expectation;
-use Spatie\LaravelAiTests\Checks\RubricCriterion;
-use Spatie\LaravelAiTests\Drivers\DescribesContext;
-use Spatie\LaravelAiTests\Drivers\Driver;
-use Spatie\LaravelAiTests\Judge\Judge;
-use Spatie\LaravelAiTests\Results\CheckOutcome;
-use Spatie\LaravelAiTests\Results\RunResult;
-use Spatie\LaravelAiTests\Results\TestResult;
-use Spatie\LaravelAiTests\Results\TurnResult;
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiEvals\Checks\Check;
+use Spatie\LaravelAiEvals\Checks\Expectation;
+use Spatie\LaravelAiEvals\Checks\JudgeCriterion;
+use Spatie\LaravelAiEvals\Drivers\AgentDriver;
+use Spatie\LaravelAiEvals\Drivers\Driver;
+use Spatie\LaravelAiEvals\Judge\Judge;
+use Spatie\LaravelAiEvals\Results\CheckOutcome;
+use Spatie\LaravelAiEvals\Results\EvaluationResult;
+use Spatie\LaravelAiEvals\Results\RunResult;
+use Spatie\LaravelAiEvals\Results\TurnResult;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 use Throwable;
 
 class Runner
@@ -28,56 +28,39 @@ class Runner
         protected Judge $judge,
     ) {}
 
-    public function run(AiTest $aiTest): TestResult
+    public function run(Evaluation $evaluation): EvaluationResult
     {
-        $aiTest->ensureRunnable();
+        $evaluation->ensureRunnable();
 
-        $ranAt = CarbonImmutable::now();
-
-        $driver = $this->resolveDriver($aiTest);
-
-        $context = $driver instanceof DescribesContext ? $driver->context() : [];
+        $driver = $this->resolveDriver($evaluation);
 
         $prompts = array_map(
             fn (Turn $turn): string => $this->callWithDriver($turn->prompt, $driver),
-            $aiTest->turns,
+            $evaluation->turns,
         );
 
-        $expectations = $this->resolveExpectations($aiTest, $driver);
+        $expectations = $this->resolveExpectations($evaluation, $driver);
 
         $runs = array_map(
-            fn (int $number): RunResult => $this->runOnce(
-                $aiTest,
-                $driver,
-                $prompts,
-                $expectations,
-                $number,
-            ),
-            range(1, $aiTest->runCount()),
+            fn (): RunResult => $this->runOnce($evaluation, $driver, $prompts, $expectations),
+            range(1, AiEvals::repeatCount($evaluation->repeat)),
         );
 
-        return new TestResult(
-            aiTest: $aiTest,
-            prompts: $prompts,
-            expectations: $expectations,
-            runs: $runs,
-            minPassRate: $aiTest->requiredPassRate(),
-            ranAt: $ranAt,
-            context: $context,
-        );
+        return new EvaluationResult($runs, AiEvals::minPassRate($evaluation->minPassRate));
     }
 
-    protected function resolveDriver(AiTest $aiTest): Driver
+    protected function resolveDriver(Evaluation $evaluation): Driver
     {
-        $driver = $aiTest->driver instanceof Closure
-            ? app()->call($aiTest->driver)
-            : $aiTest->driver;
+        $agent = $evaluation->agent instanceof Closure
+            ? app()->call($evaluation->agent)
+            : $evaluation->agent;
 
-        if (! $driver instanceof Driver) {
-            throw new LogicException("The driver of the AI test \"{$aiTest->description}\" must implement ".Driver::class.'.');
-        }
-
-        return $driver;
+        return match (true) {
+            $agent instanceof Driver => $agent,
+            $agent instanceof Agent => new AgentDriver(fn (): Agent => clone $agent),
+            is_string($agent) && is_subclass_of($agent, Agent::class) => new AgentDriver($agent),
+            default => throw new LogicException("The agent of the evaluation \"{$evaluation->description}\" must be a ".Driver::class.', an '.Agent::class.' or an agent class, but is '.get_debug_type($agent).'.'),
+        };
     }
 
     /** @param array<string, mixed> $parameters */
@@ -91,17 +74,17 @@ class Runner
     }
 
     /** @return array<int, array<int, Expectation>> */
-    protected function resolveExpectations(AiTest $aiTest, Driver $driver): array
+    protected function resolveExpectations(Evaluation $evaluation, Driver $driver): array
     {
         $resolve = fn (mixed $value, array $parameters = []): mixed => $this->callWithDriver($value, $driver, $parameters);
 
         try {
             return array_map(
                 fn (Turn $turn): array => $turn->resolveExpectations($resolve),
-                $aiTest->turns,
+                $evaluation->turns,
             );
         } catch (Throwable $exception) {
-            throw new LogicException("The AI test \"{$aiTest->description}\" has a check that can't be set up. {$exception->getMessage()}", previous: $exception);
+            throw new LogicException("The evaluation \"{$evaluation->description}\" has a check that can't be set up. {$exception->getMessage()}", previous: $exception);
         }
     }
 
@@ -110,13 +93,12 @@ class Runner
      * @param  array<int, array<int, Expectation>>  $expectations
      */
     protected function runOnce(
-        AiTest $aiTest,
+        Evaluation $evaluation,
         Driver $driver,
         array $prompts,
         array $expectations,
-        int $number,
     ): RunResult {
-        $run = new RunResult($number);
+        $run = new RunResult;
         $unfinishedTurn = null;
         $transactionLevel = DB::transactionLevel();
 
@@ -125,7 +107,7 @@ class Runner
 
             $driver->startConversation();
 
-            foreach ($aiTest->turns as $index => $turn) {
+            foreach ($evaluation->turns as $index => $turn) {
                 $unfinishedTurn = new Transcript($prompts[$index]);
 
                 $this->converse($driver, $turn, $unfinishedTurn);
@@ -174,7 +156,7 @@ class Runner
     protected function evaluate(array $expectations, Transcript $transcript, array $earlierTurns): TurnResult
     {
         $checks = array_filter($expectations, fn (Expectation $expectation): bool => $expectation instanceof Check);
-        $rubric = array_filter($expectations, fn (Expectation $expectation): bool => $expectation instanceof RubricCriterion);
+        $criteria = array_filter($expectations, fn (Expectation $expectation): bool => $expectation instanceof JudgeCriterion);
 
         $outcomes = array_values(array_map(
             fn (Check $check): CheckOutcome => $check->evaluate($transcript),
@@ -182,16 +164,12 @@ class Runner
         ));
 
         try {
-            $judgeResult = $this->judge->evaluate(array_values($rubric), $transcript, $earlierTurns);
+            $judgeOutcomes = $this->judge->evaluate(array_values($criteria), $transcript, $earlierTurns);
         } catch (Throwable $exception) {
             return new TurnResult($transcript, $outcomes, judgeError: $this->describe($exception));
         }
 
-        return new TurnResult(
-            transcript: $transcript,
-            outcomes: [...$outcomes, ...$judgeResult->outcomes],
-            judgeModel: $judgeResult->model,
-        );
+        return new TurnResult($transcript, [...$outcomes, ...$judgeOutcomes]);
     }
 
     protected function describe(Throwable $exception): string

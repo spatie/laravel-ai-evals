@@ -1,6 +1,6 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Tests\TestSupport;
+namespace Spatie\LaravelAiEvals\Tests\TestSupport;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;

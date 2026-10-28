@@ -3,8 +3,10 @@
 use Laravel\Ai\Approvals\PendingApproval;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
-use Spatie\LaravelAiTests\Tests\TestSupport\ShopDriver;
-use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
+use Spatie\LaravelAiEvals\Evaluation;
+use Spatie\LaravelAiEvals\Tests\TestSupport\ShopDriver;
+use Spatie\LaravelAiEvals\Tests\TestSupport\SupportAgent;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 
 beforeEach(function () {
     SupportAgent::fake([
@@ -14,38 +16,29 @@ beforeEach(function () {
 });
 
 it('rejects pending tool calls by default', function () {
-    $aiTest = makeAiTest('asks before cancelling');
+    $evaluation = new Evaluation('asks before cancelling');
 
-    $aiTest
-        ->driver(fn () => ShopDriver::forNewCustomer())
-        ->runs(1)
-        ->user('Cancel order 1234.');
+    $evaluation
+        ->agent(fn () => ShopDriver::forNewCustomer())
+        ->prompt('Cancel order 1234.')
+        ->toPassCheck('Records the rejection', fn (Transcript $transcript) => $transcript->toolCalls['call-1']->decisionLabel() === 'rejected');
 
-    $aiTest->execute();
+    $evaluation->execute();
 
     SupportAgent::assertPrompted(fn (AgentPrompt $prompt) => $prompt->approvalDecisions?->get('call-1')?->isRejected() === true);
-
-    expect(resultFile('asks-before-cancelling')->get('turns')[0]['runs'][0]['tool_calls'])->toBe([
-        ['name' => 'cancel_order', 'arguments' => ['order' => '1234'], 'status' => 'pending', 'approval' => 'rejected'],
-    ]);
 });
 
 it('approves pending tool calls with approveAll', function () {
-    $aiTest = makeAiTest('cancels after approval');
+    $evaluation = new Evaluation('cancels after approval');
 
-    $aiTest
-        ->driver(fn () => ShopDriver::forNewCustomer())
-        ->runs(1)
-        ->user('Cancel order 1234.')
-        ->approveAll();
+    $evaluation
+        ->agent(fn () => ShopDriver::forNewCustomer())
+        ->prompt('Cancel order 1234.')
+        ->approveAll()
+        ->toPassCheck('Records the approval', fn (Transcript $transcript) => $transcript->toolCalls['call-1']->decisionLabel() === 'approved')
+        ->toContain('Done');
 
-    $aiTest->execute();
+    $evaluation->execute();
 
     SupportAgent::assertPrompted(fn (AgentPrompt $prompt) => $prompt->approvalDecisions?->get('call-1')?->isApproved() === true);
-
-    expect(resultFile('cancels-after-approval')->get('turns')[0]['runs'][0])
-        ->toMatchArray(['answer' => 'Done.'])
-        ->tool_calls->toBe([
-            ['name' => 'cancel_order', 'arguments' => ['order' => '1234'], 'status' => 'pending', 'approval' => 'approved'],
-        ]);
 });

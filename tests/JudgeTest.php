@@ -2,13 +2,15 @@
 
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\Data\ToolCall;
-use PHPUnit\Framework\AssertionFailedError;
-use Spatie\LaravelAiTests\Drivers\AgentDriver;
-use Spatie\LaravelAiTests\Judge\JudgeAgent;
-use Spatie\LaravelAiTests\Tests\TestSupport\ShopDriver;
-use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
+use Spatie\LaravelAiEvals\AiEvals;
+use Spatie\LaravelAiEvals\Drivers\AgentDriver;
+use Spatie\LaravelAiEvals\Evaluation;
+use Spatie\LaravelAiEvals\Judge\JudgeAgent;
+use Spatie\LaravelAiEvals\Tests\TestSupport\ShopDriver;
+use Spatie\LaravelAiEvals\Tests\TestSupport\ShopJudgeAgent;
+use Spatie\LaravelAiEvals\Tests\TestSupport\SupportAgent;
 
-it('matches verdicts to criteria by number', function () {
+it('grades all criteria of a turn in one judge call and matches verdicts by number', function () {
     SupportAgent::fake([
         new ToolCall('call-1', 'lookup_order', ['order' => '1234']),
         'Order 1234 shipped.',
@@ -21,19 +23,17 @@ it('matches verdicts to criteria by number', function () {
         ]],
     ]);
 
-    $aiTest = makeAiTest('names the order');
+    $evaluation = new Evaluation('names the order');
 
-    $aiTest
-        ->driver(fn () => ShopDriver::forNewCustomer())
-        ->runs(1)
-        ->user('Where is my order?')
-        ->expectRubric('Names the order.', 'Is polite.');
+    $evaluation
+        ->agent(fn () => ShopDriver::forNewCustomer())
+        ->prompt('Where is my order?')
+        ->toSatisfy('Names the order.')
+        ->toSatisfy('Is polite.');
 
-    expect(fn () => $aiTest->execute())->toThrow(AssertionFailedError::class);
-
-    expect(resultFile('names-the-order')->get('turns')[0]['runs'][0]['verdicts'])->toBe([
-        ['check' => 'Names the order.', 'passed' => true, 'reason' => 'It names the order.'],
-        ['check' => 'Is polite.', 'passed' => false, 'reason' => 'It is rude.'],
+    expect(outcomes(runEvaluation($evaluation)))->toBe([
+        ['Names the order.', true, 'It names the order.'],
+        ['Is polite.', false, 'It is rude.'],
     ]);
 
     JudgeAgent::assertPrompted(fn (AgentPrompt $prompt) => str_contains($prompt->prompt, "Tool call `lookup_order` {\"order\":\"1234\"} (completed)\nResult: Order 1234 shipped yesterday.")
@@ -41,29 +41,82 @@ it('matches verdicts to criteria by number', function () {
         && str_contains($prompt->prompt, "1. Names the order.\n2. Is polite."));
 });
 
-it('treats a missing verdict as a judge error, and still fails a run that failed a check', function () {
-    SupportAgent::fake(['Order 1234 shipped yesterday, as planned.', 'Order 1234 shipped.']);
+it('leaves runs the judge could not grade out of the pass rate, but still fails a run that failed a check', function () {
+    SupportAgent::fake(['Order 1234 shipped.', 'Order 1234 shipped yesterday, as planned.', 'Order 1234 shipped.']);
 
-    JudgeAgent::fake(fn () => ['verdicts' => [['criterion' => 2, 'reason' => 'It is polite.', 'pass' => true]]]);
+    $judgeCalls = 0;
 
-    $aiTest = makeAiTest('skips a verdict');
+    JudgeAgent::fake(function () use (&$judgeCalls) {
+        if (++$judgeCalls > 1) {
+            throw new RuntimeException('The judge is rate limited.');
+        }
 
-    $aiTest
-        ->driver(new AgentDriver(SupportAgent::class))
-        ->runs(2)
-        ->user('Where is my order?')
-        ->expectMaxWords(3)
-        ->expectRubric('Names the order.', 'Is polite.');
+        return ['verdicts' => [['criterion' => 1, 'reason' => 'It names the order.', 'pass' => true]]];
+    });
 
-    expect(fn () => $aiTest->execute())->toThrow(AssertionFailedError::class, '1 unjudged run left out.');
+    $evaluation = new Evaluation('survives a judge error');
 
-    $result = resultFile('skips-a-verdict');
+    $evaluation
+        ->agent(new AgentDriver(SupportAgent::class))
+        ->repeat(3, minPassRate: 1)
+        ->prompt('Where is my order?')
+        ->toHaveMaxWords(3)
+        ->toSatisfy('Names the order.');
 
-    expect($result->data)->toMatchArray(['passed_runs' => 0, 'unjudged_runs' => 1]);
-
-    expect($result->get('turns')[0]['runs'][0]['judge_error'])
-        ->toBe('LogicException: The judge must return one verdict for each criterion from 1 to 2, but returned verdicts for criteria [2].');
+    expect(failureMessage($evaluation))->toBe(implode("\n", [
+        '1/2 runs passed, below the minimum pass rate of 1. 1 unjudged run left out.',
+        '',
+        'Run 2, turn 1 failed, and the judge failed: RuntimeException: The judge is rate limited.',
+        '  Prompt:',
+        '    Where is my order?',
+        '  Tool calls: none',
+        '  Answer:',
+        '    Order 1234 shipped yesterday, as planned.',
+        '  Failed checks:',
+        '    ✗ At most 3 words',
+        '      Answered in 6 words.',
+        '',
+        'Run 3, turn 1 could not be judged: RuntimeException: The judge is rate limited.',
+        '  Prompt:',
+        '    Where is my order?',
+        '  Tool calls: none',
+        '  Answer:',
+        '    Order 1234 shipped.',
+    ]));
 });
+
+it('fails when no run could be judged', function (array $verdicts, string $judgeError) {
+    SupportAgent::fake(['Your order shipped yesterday.']);
+
+    JudgeAgent::fake(fn () => ['verdicts' => $verdicts]);
+
+    $evaluation = new Evaluation('cannot be judged');
+
+    $evaluation
+        ->agent(new AgentDriver(SupportAgent::class))
+        ->prompt('Where is my order?')
+        ->toSatisfy('Says when the order shipped.');
+
+    expect(failureMessage($evaluation))->toBe(implode("\n", [
+        'No run could be judged, because the judge failed in every run.',
+        '',
+        "Run 1, turn 1 could not be judged: {$judgeError}",
+        '  Prompt:',
+        '    Where is my order?',
+        '  Tool calls: none',
+        '  Answer:',
+        '    Your order shipped yesterday.',
+    ]));
+})->with([
+    'wrong criterion numbers' => [
+        [['criterion' => 2, 'reason' => 'It is polite.', 'pass' => true]],
+        'LogicException: The judge must return one verdict for each criterion from 1 to 1, but returned verdicts for criteria [2].',
+    ],
+    'a verdict without pass' => [
+        [['criterion' => 1, 'reason' => 'It says when.']],
+        'LogicException: The judge returned a malformed verdict at position 1. Each verdict needs an integer `criterion`, a boolean `pass` and a string `reason`, but got {"criterion":1,"reason":"It says when."}.',
+    ],
+]);
 
 it('gives the judge the earlier turns as context without grading them', function () {
     SupportAgent::fake([
@@ -76,16 +129,15 @@ it('gives the judge the earlier turns as context without grading them', function
         ['verdicts' => [['criterion' => 1, 'reason' => 'It gives a date.', 'pass' => true]]],
     ]);
 
-    $aiTest = makeAiTest('answers a follow-up question');
+    $evaluation = new Evaluation('answers a follow-up question');
 
-    $aiTest
-        ->driver(fn () => ShopDriver::forNewCustomer())
-        ->runs(1)
-        ->user('Where is order 1234?')
-        ->user('When does it arrive?')
-        ->expectRubric('Gives a delivery date.');
+    $evaluation
+        ->agent(fn () => ShopDriver::forNewCustomer())
+        ->prompt('Where is order 1234?')
+        ->prompt('When does it arrive?')
+        ->toSatisfy('Gives a delivery date.');
 
-    $aiTest->execute();
+    $evaluation->execute();
 
     JudgeAgent::assertPrompted(fn (AgentPrompt $prompt) => str_contains($prompt->prompt, implode("\n", [
         '# Earlier turns',
@@ -108,4 +160,34 @@ it('gives the judge the earlier turns as context without grading them', function
         'Assistant answer:',
         'It arrives tomorrow.',
     ])));
+});
+
+it('judges with the configured agent and the model from the environment', function () {
+    $_SERVER['PEST_EVALS_LARAVEL_SCORING_MODEL'] = 'judge-model';
+
+    AiEvals::judgeUsing(ShopJudgeAgent::class);
+
+    SupportAgent::fake(['Order 1234 shipped yesterday.']);
+
+    ShopJudgeAgent::fake([
+        ['verdicts' => [['criterion' => 1, 'reason' => 'It says when.', 'pass' => true]]],
+    ]);
+
+    $evaluation = new Evaluation('is graded by the shop judge');
+
+    $evaluation
+        ->agent(new AgentDriver(SupportAgent::class))
+        ->prompt('Where is my order?')
+        ->toSatisfy('Says when the order shipped.');
+
+    $evaluation->execute();
+
+    ShopJudgeAgent::assertPrompted(fn (AgentPrompt $prompt) => $prompt->model === 'judge-model');
+    JudgeAgent::assertNeverPrompted();
+})->after(function () {
+    unset($_SERVER['PEST_EVALS_LARAVEL_SCORING_MODEL']);
+});
+
+it('refuses a judge agent without structured output', function () {
+    expect(fn () => AiEvals::judgeUsing(SupportAgent::class))->toThrow(LogicException::class, 'must implement');
 });

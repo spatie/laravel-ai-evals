@@ -1,10 +1,8 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Results;
+namespace Spatie\LaravelAiEvals\Results;
 
-use Illuminate\Support\Arr;
-use Spatie\LaravelAiTests\Checks\Expectation;
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 
 class TurnResult
 {
@@ -12,7 +10,6 @@ class TurnResult
     public function __construct(
         public Transcript $transcript,
         public array $outcomes,
-        public ?string $judgeModel = null,
         public ?string $judgeError = null,
     ) {}
 
@@ -23,16 +20,11 @@ class TurnResult
 
     public function failed(): bool
     {
-        return collect($this->outcomes)->contains(fn (CheckOutcome $outcome): bool => ! $outcome->passed);
+        return array_filter($this->outcomes, fn (CheckOutcome $outcome): bool => ! $outcome->passed) !== [];
     }
 
     public function unjudged(): bool
     {
         return $this->judgeError !== null && ! $this->failed();
-    }
-
-    public function outcomeFor(Expectation $expectation): ?CheckOutcome
-    {
-        return Arr::first($this->outcomes, fn (CheckOutcome $outcome): bool => $outcome->expectation === $expectation);
     }
 }

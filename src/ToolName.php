@@ -1,6 +1,6 @@
 <?php
 
-namespace Spatie\LaravelAiTests;
+namespace Spatie\LaravelAiEvals;
 
 use LogicException;
 use Throwable;

@@ -1,9 +1,9 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Tests\TestSupport;
+namespace Spatie\LaravelAiEvals\Tests\TestSupport;
 
 use Laravel\Ai\Responses\AgentResponse;
-use Spatie\LaravelAiTests\Drivers\Driver;
+use Spatie\LaravelAiEvals\Drivers\Driver;
 
 class ScriptedDriver implements Driver
 {

@@ -1,13 +1,14 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Transcript;
+namespace Spatie\LaravelAiEvals\Transcript;
 
+use Closure;
 use Illuminate\Support\Str;
 use Laravel\Ai\Approvals\PendingApproval;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
-use Spatie\LaravelAiTests\ToolName;
+use Spatie\LaravelAiEvals\ToolName;
 
 class Transcript
 {
@@ -17,16 +18,12 @@ class Transcript
     /** @var array<int, string> */
     public array $texts = [];
 
-    public ?string $model = null;
-
     public function __construct(
         public string $prompt,
     ) {}
 
     public function addResponse(AgentResponse $response): void
     {
-        $this->model ??= $response->meta->model;
-
         foreach ($response->toolCalls as $toolCall) {
             $this->recordToolCall($toolCall);
         }
@@ -39,8 +36,10 @@ class Transcript
             $this->recordPendingApproval($pendingApproval);
         }
 
-        if (trim($response->text) !== '') {
-            $this->texts[] = trim($response->text);
+        $text = trim($response->text);
+
+        if ($text !== '') {
+            $this->texts[] = $text;
         }
     }
 
@@ -48,20 +47,21 @@ class Transcript
     public function recordDecisions(array $decisions): void
     {
         foreach ($decisions as $toolCallId => $approved) {
-            if (isset($this->toolCalls[$toolCallId])) {
-                $this->toolCalls[$toolCallId]->approved = $approved;
-            }
+            $this->toolCalls[$toolCallId]->approved = $approved;
         }
     }
 
-    /** @return array<string, ToolCallRecord> */
-    public function callsTo(string $tool): array
+    /**
+     * @param  array<string, mixed>|Closure(array<string, mixed>): mixed|null  $arguments
+     * @return array<string, ToolCallRecord>
+     */
+    public function callsTo(string $tool, array|Closure|null $arguments = null): array
     {
         $name = ToolName::of($tool);
 
         return array_filter(
             $this->toolCalls,
-            fn (ToolCallRecord $toolCall): bool => $toolCall->name === $name,
+            fn (ToolCallRecord $toolCall): bool => $toolCall->name === $name && $toolCall->hasArguments($arguments),
         );
     }
 

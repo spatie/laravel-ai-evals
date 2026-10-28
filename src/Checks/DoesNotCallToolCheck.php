@@ -1,38 +1,19 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Checks;
+namespace Spatie\LaravelAiEvals\Checks;
 
-use Spatie\LaravelAiTests\Results\CheckOutcome;
-use Spatie\LaravelAiTests\ToolName;
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiEvals\Results\CheckOutcome;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 
-class DoesNotCallToolCheck extends Check
+class DoesNotCallToolCheck extends ToolCheck
 {
-    protected string $toolName;
-
-    public function __construct(string $tool)
-    {
-        $this->toolName = ToolName::of($tool);
-    }
-
     public function label(): string
     {
-        return "Does not call `{$this->toolName}`";
-    }
-
-    public function kind(): ExpectationKind
-    {
-        return ExpectationKind::Tool;
+        return "Does not call {$this->tool()}";
     }
 
     public function evaluate(Transcript $transcript): CheckOutcome
     {
-        $called = $transcript->callsTo($this->toolName) !== [];
-
-        return new CheckOutcome(
-            expectation: $this,
-            passed: ! $called,
-            reason: $called ? "Called {$this->toolName}." : null,
-        );
+        return $this->outcome(! $this->calls($transcript), "Called {$this->tool()}.");
     }
 }

@@ -1,3 +1,2 @@
 providers:
   - Laravel\Ai\AiServiceProvider
-  - Spatie\LaravelAiTests\LaravelAiTestsServiceProvider

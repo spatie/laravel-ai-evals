@@ -1,63 +1,63 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Judge;
+namespace Spatie\LaravelAiEvals\Judge;
 
-use Illuminate\Support\Collection;
-use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use LogicException;
-use Spatie\LaravelAiTests\Checks\RubricCriterion;
-use Spatie\LaravelAiTests\Results\CheckOutcome;
-use Spatie\LaravelAiTests\Transcript\ToolCallRecord;
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiEvals\AiEvals;
+use Spatie\LaravelAiEvals\Checks\JudgeCriterion;
+use Spatie\LaravelAiEvals\Results\CheckOutcome;
+use Spatie\LaravelAiEvals\Transcript\ToolCallRecord;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 
 class Judge
 {
     /**
-     * @param  array<int, RubricCriterion>  $rubric
+     * @param  list<JudgeCriterion>  $criteria
      * @param  array<int, Transcript>  $earlierTurns
+     * @return array<int, CheckOutcome>
      */
-    public function evaluate(array $rubric, Transcript $transcript, array $earlierTurns = []): JudgeResult
+    public function evaluate(array $criteria, Transcript $transcript, array $earlierTurns = []): array
     {
-        if ($rubric === []) {
-            return new JudgeResult([]);
+        if ($criteria === []) {
+            return [];
         }
 
-        $agent = $this->agent();
+        $agent = AiEvals::judgeAgent();
 
         $response = $agent->prompt(
-            $this->prompt($rubric, $transcript, $earlierTurns),
-            provider: config('ai-tests.judge.provider'),
-            model: config('ai-tests.judge.model'),
+            $this->prompt($criteria, $transcript, $earlierTurns),
+            provider: AiEvals::judgeProvider(),
+            model: AiEvals::judgeModel(),
         );
 
         if (! $response instanceof StructuredAgentResponse) {
             throw new LogicException('The judge agent '.$agent::class.' must have structured output.');
         }
 
-        $verdicts = collect($response['verdicts'] ?? []);
+        $verdicts = $response['verdicts'] ?? [];
 
-        $this->ensureOneVerdictPerCriterion($verdicts, count($rubric));
+        $this->ensureValidVerdicts($verdicts);
+        $this->ensureOneVerdictPerCriterion($verdicts, count($criteria));
 
-        $verdicts = $verdicts->keyBy('criterion');
+        $verdicts = array_column($verdicts, null, 'criterion');
 
-        $outcomes = collect(array_values($rubric))
-            ->map(fn (RubricCriterion $criterion, int $index): CheckOutcome => $this->outcome($criterion, $verdicts->get($index + 1)))
-            ->all();
-
-        return new JudgeResult($outcomes, $response->meta->model);
-    }
-
-    protected function agent(): Agent
-    {
-        return app(config('ai-tests.judge.agent'));
+        return array_map(
+            fn (JudgeCriterion $criterion, int $index): CheckOutcome => new CheckOutcome(
+                $criterion->label(),
+                passed: $verdicts[$index + 1]['pass'],
+                reason: $verdicts[$index + 1]['reason'],
+            ),
+            $criteria,
+            array_keys($criteria),
+        );
     }
 
     /**
-     * @param  array<int, RubricCriterion>  $rubric
+     * @param  list<JudgeCriterion>  $criteria
      * @param  array<int, Transcript>  $earlierTurns
      */
-    protected function prompt(array $rubric, Transcript $transcript, array $earlierTurns): string
+    protected function prompt(array $criteria, Transcript $transcript, array $earlierTurns): string
     {
         $sections = [];
 
@@ -65,12 +65,14 @@ class Judge
             $sections[] = "# Earlier turns\n\nContext only. Do not grade these turns.";
 
             foreach (array_values($earlierTurns) as $index => $earlierTurn) {
-                $sections[] = '## Turn '.($index + 1)."\n\n{$this->earlierTurn($earlierTurn)}";
+                $turnNumber = $index + 1;
+
+                $sections[] = "## Turn {$turnNumber}\n\n{$this->earlierTurn($earlierTurn)}";
             }
         }
 
         $sections[] = "# Turn to grade\n\n{$this->transcript($transcript)}";
-        $sections[] = "# Criteria\n\n{$this->numberedCriteria($rubric)}";
+        $sections[] = "# Criteria\n\n{$this->numberedCriteria($criteria)}";
 
         return implode("\n\n", $sections);
     }
@@ -123,37 +125,60 @@ class Judge
 
     protected function toolCallSummary(ToolCallRecord $toolCall): string
     {
-        $arguments = json_encode($toolCall->arguments, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $decision = $toolCall->decisionLabel() !== null ? ", user {$toolCall->decisionLabel()} it" : '';
 
-        return "Tool call `{$toolCall->name}` {$arguments} ({$toolCall->status->value}{$decision})";
+        return "Tool call `{$toolCall->name}` {$toolCall->encodedArguments()} ({$toolCall->status->label()}{$decision})";
     }
 
-    /** @param array<int, RubricCriterion> $rubric */
-    protected function numberedCriteria(array $rubric): string
+    /** @param list<JudgeCriterion> $criteria */
+    protected function numberedCriteria(array $criteria): string
     {
-        return collect(array_values($rubric))
-            ->map(fn (RubricCriterion $criterion, int $index): string => ($index + 1).". {$criterion->criterion}")
-            ->implode("\n");
+        return implode("\n", array_map(
+            fn (JudgeCriterion $criterion, int $index): string => ($index + 1).". {$criterion->criterion}",
+            $criteria,
+            array_keys($criteria),
+        ));
     }
 
-    /** @param Collection<int, array{criterion: int, reason: string, pass: bool}> $verdicts */
-    protected function ensureOneVerdictPerCriterion(Collection $verdicts, int $criterionCount): void
+    protected function ensureValidVerdicts(mixed $verdicts): void
     {
-        $numbers = $verdicts
-            ->map(fn (array $verdict): int => $verdict['criterion'])
-            ->sort()
-            ->values()
-            ->all();
+        if (! is_array($verdicts) || ! array_is_list($verdicts)) {
+            throw new LogicException("The judge must return a list of verdicts, but got {$this->encode($verdicts)}.");
+        }
 
-        if ($numbers !== range(1, $criterionCount)) {
-            throw new LogicException("The judge must return one verdict for each criterion from 1 to {$criterionCount}, but returned verdicts for criteria [".implode(', ', $numbers).'].');
+        foreach ($verdicts as $index => $verdict) {
+            if (! $this->isValidVerdict($verdict)) {
+                $position = $index + 1;
+
+                throw new LogicException("The judge returned a malformed verdict at position {$position}. Each verdict needs an integer `criterion`, a boolean `pass` and a string `reason`, but got {$this->encode($verdict)}.");
+            }
         }
     }
 
-    /** @param array{criterion: int, reason: string, pass: bool} $verdict */
-    protected function outcome(RubricCriterion $criterion, array $verdict): CheckOutcome
+    protected function isValidVerdict(mixed $verdict): bool
     {
-        return new CheckOutcome($criterion, passed: $verdict['pass'], reason: $verdict['reason']);
+        return is_array($verdict)
+            && is_int($verdict['criterion'] ?? null)
+            && is_bool($verdict['pass'] ?? null)
+            && is_string($verdict['reason'] ?? null);
+    }
+
+    protected function encode(mixed $value): string
+    {
+        return (string) json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+
+    /** @param array<int, array{criterion: int, reason: string, pass: bool}> $verdicts */
+    protected function ensureOneVerdictPerCriterion(array $verdicts, int $criterionCount): void
+    {
+        $numbers = array_column($verdicts, 'criterion');
+
+        sort($numbers);
+
+        if ($numbers !== range(1, $criterionCount)) {
+            $returned = implode(', ', $numbers);
+
+            throw new LogicException("The judge must return one verdict for each criterion from 1 to {$criterionCount}, but returned verdicts for criteria [{$returned}].");
+        }
     }
 }

@@ -1,11 +1,11 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Checks;
+namespace Spatie\LaravelAiEvals\Checks;
 
-use Spatie\LaravelAiTests\Results\CheckOutcome;
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiEvals\Results\CheckOutcome;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 
-class MentionsInOrderCheck extends Check
+class ContainsInOrderCheck extends Check
 {
     /** @param array<int, string> $needles */
     public function __construct(
@@ -16,23 +16,14 @@ class MentionsInOrderCheck extends Check
     {
         $quoted = array_map(fn (string $needle): string => static::quote($needle), $this->needles);
 
-        return 'Mentions '.implode(', then ', $quoted);
-    }
-
-    public function kind(): ExpectationKind
-    {
-        return ExpectationKind::Mentions;
+        return 'Contains '.implode(', then ', $quoted);
     }
 
     public function evaluate(Transcript $transcript): CheckOutcome
     {
         $reason = $this->failureReason($transcript->answer());
 
-        return new CheckOutcome(
-            expectation: $this,
-            passed: $reason === null,
-            reason: $reason,
-        );
+        return new CheckOutcome($this->label(), passed: $reason === null, reason: $reason);
     }
 
     protected function failureReason(string $answer): ?string
@@ -51,10 +42,10 @@ class MentionsInOrderCheck extends Check
             }
 
             if (mb_stripos($answer, $needle) === false) {
-                return 'Does not mention '.static::quote($needle).'.';
+                return 'Does not contain '.static::quote($needle).'.';
             }
 
-            return 'Mentions '.static::quote($needle).' before '.static::quote($previousNeedle).'.';
+            return 'Contains '.static::quote($needle).' before '.static::quote($previousNeedle).'.';
         }
 
         return null;

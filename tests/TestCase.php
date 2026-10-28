@@ -1,12 +1,12 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Tests;
+namespace Spatie\LaravelAiEvals\Tests;
 
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\AiServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
-use Spatie\LaravelAiTests\LaravelAiTestsServiceProvider;
+use Spatie\LaravelAiEvals\AiEvals;
+use Spatie\LaravelAiEvals\Plugin;
 
 class TestCase extends Orchestra
 {
@@ -16,14 +16,22 @@ class TestCase extends Orchestra
 
         Http::preventStrayRequests();
 
-        File::deleteDirectory(config('ai-tests.results_path'));
+        Plugin::enableEvalMode();
+    }
+
+    protected function tearDown(): void
+    {
+        Plugin::resetEvalMode();
+
+        AiEvals::flush();
+
+        parent::tearDown();
     }
 
     protected function getPackageProviders($app): array
     {
         return [
             AiServiceProvider::class,
-            LaravelAiTestsServiceProvider::class,
         ];
     }
 
@@ -31,7 +39,6 @@ class TestCase extends Orchestra
     {
         $app['config']->set('database.default', 'testing');
         $app['config']->set('ai.conversations.generate_title', false);
-        $app['config']->set('ai-tests.results_path', sys_get_temp_dir().'/laravel-ai-tests/results');
     }
 
     protected function defineDatabaseMigrations(): void

@@ -1,11 +1,11 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Checks;
+namespace Spatie\LaravelAiEvals\Checks;
 
-use Spatie\LaravelAiTests\Results\CheckOutcome;
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiEvals\Results\CheckOutcome;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 
-class DoesNotMentionCheck extends Check
+class DoesNotContainCheck extends Check
 {
     public function __construct(
         protected string $needle,
@@ -13,12 +13,7 @@ class DoesNotMentionCheck extends Check
 
     public function label(): string
     {
-        return 'Does not mention '.static::quote($this->needle);
-    }
-
-    public function kind(): ExpectationKind
-    {
-        return ExpectationKind::Mentions;
+        return 'Does not contain '.static::quote($this->needle);
     }
 
     public function evaluate(Transcript $transcript): CheckOutcome
@@ -26,9 +21,9 @@ class DoesNotMentionCheck extends Check
         $match = $this->firstMatch($transcript->answer());
 
         return new CheckOutcome(
-            expectation: $this,
+            $this->label(),
             passed: $match === null,
-            reason: $match === null ? null : 'Mentions '.static::quote($match).'.',
+            reason: $match === null ? null : 'Contains '.static::quote($match).'.',
         );
     }
 

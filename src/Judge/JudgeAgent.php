@@ -1,6 +1,6 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Judge;
+namespace Spatie\LaravelAiEvals\Judge;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;

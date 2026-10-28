@@ -1,8 +1,8 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Tests\TestSupport;
+namespace Spatie\LaravelAiEvals\Tests\TestSupport;
 
-use Spatie\LaravelAiTests\Drivers\AgentDriver;
+use Spatie\LaravelAiEvals\Drivers\AgentDriver;
 
 class ShopDriver extends AgentDriver
 {

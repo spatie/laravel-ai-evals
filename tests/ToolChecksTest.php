@@ -5,78 +5,67 @@ use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
-use PHPUnit\Framework\AssertionFailedError;
-use Spatie\LaravelAiTests\Drivers\AgentDriver;
-use Spatie\LaravelAiTests\Tests\TestSupport\CancelOrderTool;
-use Spatie\LaravelAiTests\Tests\TestSupport\LookupOrderMcpTool;
-use Spatie\LaravelAiTests\Tests\TestSupport\LookupOrderTool;
-use Spatie\LaravelAiTests\Tests\TestSupport\RefundOrderTool;
-use Spatie\LaravelAiTests\Tests\TestSupport\ScriptedDriver;
-use Spatie\LaravelAiTests\Tests\TestSupport\ShippingApiTool;
-use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
+use Spatie\LaravelAiEvals\Drivers\AgentDriver;
+use Spatie\LaravelAiEvals\Evaluation;
+use Spatie\LaravelAiEvals\Tests\TestSupport\CancelOrderTool;
+use Spatie\LaravelAiEvals\Tests\TestSupport\LookupOrderMcpTool;
+use Spatie\LaravelAiEvals\Tests\TestSupport\LookupOrderTool;
+use Spatie\LaravelAiEvals\Tests\TestSupport\RefundOrderTool;
+use Spatie\LaravelAiEvals\Tests\TestSupport\ScriptedDriver;
+use Spatie\LaravelAiEvals\Tests\TestSupport\ShippingApiTool;
+use Spatie\LaravelAiEvals\Tests\TestSupport\SupportAgent;
 
-beforeEach(function () {
+it('checks which tools the agent called, with which arguments, and how often', function () {
     SupportAgent::fake([
-        new ToolCall('call-1', 'lookup_order', ['order' => '1234']),
+        new ToolCall('call-1', 'lookup_order', ['order' => '1234', 'include' => ['items' => true, 'shipments' => true]]),
         'Order 1234 shipped yesterday.',
     ]);
-});
 
-it('checks which tools the agent called', function () {
-    $aiTest = makeAiTest('looks up the order');
+    $evaluation = new Evaluation('looks up the order');
 
-    $aiTest
-        ->driver(new AgentDriver(SupportAgent::class))
-        ->runs(1)
-        ->user('Where is order 1234?')
-        ->expectTools(called: [LookupOrderTool::class], notCalled: ['cancel_order'], maxCalls: 1);
+    $evaluation
+        ->agent(new AgentDriver(SupportAgent::class))
+        ->prompt('Where is order 1234?')
+        ->toHaveToolCalls([LookupOrderTool::class])
+        ->toHaveToolCalls(['lookup_order' => ['order' => '1234', 'include' => ['shipments' => true]]])
+        ->toHaveToolCalls(['lookup_order' => ['order' => 1234]])
+        ->toHaveToolCalls(['lookup_order' => fn (array $arguments) => $arguments['order'] === '1234'])
+        ->not->toHaveToolCalls(['cancel_order', 'lookup_order' => ['order' => '9999']])
+        ->not->toHaveToolCalls([LookupOrderMcpTool::class])
+        ->toHaveMaxToolCalls(1)
+        ->toHaveMaxToolCalls(0);
 
-    $aiTest->execute();
-
-    $turn = resultFile('looks-up-the-order')->get('turns')[0];
-
-    expect(checkSummaries($turn))->toBe([
-        ['Calls `lookup_order`', 'tool', 1],
-        ['Does not call `cancel_order`', 'tool', 1],
-        ['At most 1 tool calls', 'tool', 1],
-    ]);
-
-    expect($turn['runs'][0]['tool_calls'])->toBe([
-        ['name' => 'lookup_order', 'arguments' => ['order' => '1234'], 'status' => 'completed'],
-    ]);
-});
-
-it('fails a run that calls a forbidden tool', function () {
-    $aiTest = makeAiTest('does not look up orders');
-
-    $aiTest
-        ->driver(new AgentDriver(SupportAgent::class))
-        ->runs(1)
-        ->user('Where is order 1234?')
-        ->expectTools(notCalled: [LookupOrderTool::class], maxCalls: 0);
-
-    expect(fn () => $aiTest->execute())->toThrow(AssertionFailedError::class);
-
-    expect(resultFile('does-not-look-up-orders')->get('turns')[0]['runs'][0]['verdicts'])->toBe([
-        ['check' => 'Does not call `lookup_order`', 'passed' => false, 'reason' => 'Called lookup_order.'],
-        ['check' => 'At most 0 tool calls', 'passed' => false, 'reason' => 'Made 1 tool calls.'],
+    expect(outcomes(runEvaluation($evaluation)))->toBe([
+        ['Calls `lookup_order`', true, null],
+        ['Calls `lookup_order` with {"order":"1234","include":{"shipments":true}}', true, null],
+        ['Calls `lookup_order` with {"order":1234}', false, 'Did not call `lookup_order` with {"order":1234}.'],
+        ['Calls `lookup_order` with matching arguments', true, null],
+        ['Does not call `cancel_order`', true, null],
+        ['Does not call `lookup_order` with {"order":"9999"}', true, null],
+        ['Does not call `lookup_order`', false, 'Called `lookup_order`.'],
+        ['At most 1 tool calls', true, null],
+        ['At most 0 tool calls', false, 'Made 1 tool calls.'],
     ]);
 });
 
-it('resolves the name of a tool class that is not a laravel/ai tool', function () {
-    $aiTest = makeAiTest('looks up the order over mcp');
+it('treats an argument closure that throws as not matching the call', function () {
+    SupportAgent::fake([
+        new ToolCall('call-1', 'lookup_order', ['order' => 'A-1']),
+        'Order A-1 shipped yesterday.',
+    ]);
 
-    $aiTest
-        ->driver(new AgentDriver(SupportAgent::class))
-        ->runs(1)
-        ->user('Where is order 1234?')
-        ->expectTools(called: [LookupOrderMcpTool::class]);
+    $evaluation = new Evaluation('looks up the order without the customer');
 
-    $aiTest->execute();
+    $evaluation
+        ->agent(new AgentDriver(SupportAgent::class))
+        ->prompt('Where is order A-1?')
+        ->toHaveToolCalls(['lookup_order' => fn (array $arguments) => $arguments['customer'] === 'Ada'])
+        ->not->toHaveToolCalls(['lookup_order' => fn (array $arguments) => $arguments['customer'] === 'Ada']);
 
-    expect(resultFile('looks-up-the-order-over-mcp')->get('turns')[0]['checks'][0])
-        ->label->toBe('Calls `lookup_order`')
-        ->passed_runs->toBe(1);
+    expect(outcomes(runEvaluation($evaluation)))->toBe([
+        ['Calls `lookup_order` with matching arguments', false, 'Did not call `lookup_order` with matching arguments.'],
+        ['Does not call `lookup_order` with matching arguments', true, null],
+    ]);
 });
 
 it('records whether each tool call completed, failed, was rejected or got no result', function () {
@@ -96,17 +85,20 @@ it('records whether each tool call completed, failed, was rejected or got no res
         ]),
     );
 
-    $aiTest = makeAiTest('looks up several orders');
+    $evaluation = new Evaluation('looks up several orders');
 
-    $aiTest
-        ->driver(new ScriptedDriver([$response]))
-        ->runs(1)
-        ->user('Look up orders 1 and 2, and cancel 3 and 4.');
+    $evaluation
+        ->agent(new ScriptedDriver([$response]))
+        ->prompt('Look up orders 1 and 2, and cancel 3 and 4.')
+        ->toHaveMaxToolCalls(0);
 
-    $aiTest->execute();
-
-    expect(array_column(resultFile('looks-up-several-orders')->get('turns')[0]['runs'][0]['tool_calls'], 'status'))
-        ->toBe(['completed', 'failed', 'rejected', 'no_result']);
+    expect(failureMessage($evaluation))->toContain(implode("\n", [
+        '  Tool calls:',
+        '    - lookup_order {"order":"1"} (completed)',
+        '    - lookup_order {"order":"2"} (failed)',
+        '    - cancel_order {"order":"3"} (rejected)',
+        '    - cancel_order {"order":"4"} (no result)',
+    ]));
 });
 
 it('resolves a tool class without a public name method to its class name', function (string $tool, string $name) {
@@ -117,36 +109,30 @@ it('resolves a tool class without a public name method to its class name', funct
         collect([new ToolResult('call-1', $name, ['order' => '1234'], 'Done.')]),
     );
 
-    $aiTest = makeAiTest('calls the tool');
+    $evaluation = new Evaluation('calls the tool');
 
-    $aiTest
-        ->driver(new ScriptedDriver([$response]))
-        ->runs(1)
-        ->user('Handle order 1234.')
-        ->expectTools(called: [$tool]);
+    $evaluation
+        ->agent(new ScriptedDriver([$response]))
+        ->prompt('Handle order 1234.')
+        ->toHaveToolCalls([$tool]);
 
-    $aiTest->execute();
-
-    expect(resultFile('calls-the-tool')->get('turns')[0]['checks'][0])
-        ->label->toBe("Calls `{$name}`")
-        ->passed_runs->toBe(1);
+    expect(outcomes(runEvaluation($evaluation)))->toBe([["Calls `{$name}`", true, null]]);
 })->with([
     'without a name method' => [CancelOrderTool::class, 'CancelOrderTool'],
     'with a protected name method' => [RefundOrderTool::class, 'RefundOrderTool'],
 ]);
 
 it('fails before the first run when a tool name cannot be resolved', function () {
-    $aiTest = makeAiTest('tracks the shipment');
+    $evaluation = new Evaluation('tracks the shipment');
 
-    $aiTest
-        ->driver(new AgentDriver(SupportAgent::class))
-        ->runs(1)
-        ->user('Where is my parcel?')
-        ->expectTools(called: [ShippingApiTool::class]);
+    $evaluation
+        ->agent(new AgentDriver(SupportAgent::class))
+        ->prompt('Where is my parcel?')
+        ->toHaveToolCalls([ShippingApiTool::class]);
 
-    expect(fn () => $aiTest->execute())->toThrow(
+    expect(fn () => $evaluation->execute())->toThrow(
         LogicException::class,
-        'The AI test "tracks the shipment" has a check that can\'t be set up. Could not create the tool '.ShippingApiTool::class.' to read its name',
+        'The evaluation "tracks the shipment" has a check that can\'t be set up. Could not create the tool '.ShippingApiTool::class.' to read its name',
     );
 
     SupportAgent::assertNeverPrompted();

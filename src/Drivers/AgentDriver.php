@@ -1,6 +1,6 @@
 <?php
 
-namespace Spatie\LaravelAiTests\Drivers;
+namespace Spatie\LaravelAiEvals\Drivers;
 
 use Closure;
 use Laravel\Ai\Approvals\Decisions;

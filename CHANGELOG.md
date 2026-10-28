@@ -1,3 +1,3 @@
 # Changelog
 
-All notable changes to `laravel-ai-tests` will be documented in this file.
+All notable changes to `laravel-ai-evals` will be documented in this file.

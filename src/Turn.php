@@ -1,120 +1,128 @@
 <?php
 
-namespace Spatie\LaravelAiTests;
+namespace Spatie\LaravelAiEvals;
 
 use Closure;
 use Illuminate\Support\Arr;
 use LogicException;
-use Spatie\LaravelAiTests\Checks\CallsToolCheck;
-use Spatie\LaravelAiTests\Checks\Check;
-use Spatie\LaravelAiTests\Checks\ClosureCheck;
-use Spatie\LaravelAiTests\Checks\DoesNotCallToolCheck;
-use Spatie\LaravelAiTests\Checks\DoesNotMentionCheck;
-use Spatie\LaravelAiTests\Checks\Expectation;
-use Spatie\LaravelAiTests\Checks\MaxToolCallsCheck;
-use Spatie\LaravelAiTests\Checks\MaxWordsCheck;
-use Spatie\LaravelAiTests\Checks\MentionsCheck;
-use Spatie\LaravelAiTests\Checks\MentionsInOrderCheck;
-use Spatie\LaravelAiTests\Checks\RubricCriterion;
-use Spatie\LaravelAiTests\Transcript\Transcript;
+use Spatie\LaravelAiEvals\Checks\CallsToolCheck;
+use Spatie\LaravelAiEvals\Checks\Check;
+use Spatie\LaravelAiEvals\Checks\ClosureCheck;
+use Spatie\LaravelAiEvals\Checks\ContainsCheck;
+use Spatie\LaravelAiEvals\Checks\ContainsInOrderCheck;
+use Spatie\LaravelAiEvals\Checks\DoesNotCallToolCheck;
+use Spatie\LaravelAiEvals\Checks\DoesNotContainCheck;
+use Spatie\LaravelAiEvals\Checks\Expectation;
+use Spatie\LaravelAiEvals\Checks\JudgeCriterion;
+use Spatie\LaravelAiEvals\Checks\MaxToolCallsCheck;
+use Spatie\LaravelAiEvals\Checks\MaxWordsCheck;
+use Spatie\LaravelAiEvals\Transcript\Transcript;
 
+/** @property-read Turn $not */
 class Turn
 {
     public bool $approvesAll = false;
+
+    protected bool $negated = false;
 
     /** @var array<int, Closure(Closure(mixed, array<string, mixed>=): mixed): array<int, Expectation>> */
     protected array $expectationFactories = [];
 
     public function __construct(
-        protected AiTest $aiTest,
+        protected Evaluation $evaluation,
         public string|Closure $prompt,
     ) {}
 
-    /**
-     * @param  array<int, string>|Closure  $called
-     * @param  array<int, string>|Closure  $notCalled
-     */
-    public function expectTools(
-        array|Closure $called = [],
-        array|Closure $notCalled = [],
-        int|Closure|null $maxCalls = null,
-    ): static {
-        $this->expectationFactories[] = function (Closure $resolve) use ($called, $notCalled, $maxCalls): array {
-            $checks = [
-                ...array_map(
-                    fn (string $tool): Check => new CallsToolCheck($tool),
-                    $this->strings($resolve($called), 'expectTools()'),
-                ),
-                ...array_map(
-                    fn (string $tool): Check => new DoesNotCallToolCheck($tool),
-                    $this->strings($resolve($notCalled), 'expectTools()'),
-                ),
-            ];
+    public function __get(string $name): static
+    {
+        if ($name !== 'not') {
+            throw new LogicException('Undefined property '.static::class."::\${$name}.");
+        }
 
+        if ($this->negated) {
+            throw new LogicException('->not is already negating the next expectation.');
+        }
+
+        $this->negated = true;
+
+        return $this;
+    }
+
+    /** @param array<int|string, mixed>|Closure $tools */
+    public function toHaveToolCalls(array|Closure $tools): static
+    {
+        $negated = $this->takeNegation();
+
+        $this->expectationFactories[] = fn (Closure $resolve): array => $this->toolChecks($resolve($tools), $negated);
+
+        return $this;
+    }
+
+    public function toHaveMaxToolCalls(int|Closure $maxCalls): static
+    {
+        $this->ensureNotNegated('toHaveMaxToolCalls');
+
+        $this->expectationFactories[] = function (Closure $resolve) use ($maxCalls): array {
             $maxCalls = $resolve($maxCalls);
 
-            if ($maxCalls === null) {
-                return $checks;
-            }
-
             if (! is_int($maxCalls)) {
-                throw new LogicException('The maximum number of tool calls given to expectTools() must be an integer, but is '.get_debug_type($maxCalls).'.');
+                throw new LogicException('The maximum number of tool calls given to toHaveMaxToolCalls() must be an integer, but is '.get_debug_type($maxCalls).'.');
             }
 
-            return [...$checks, new MaxToolCallsCheck($maxCalls)];
+            return [new MaxToolCallsCheck($maxCalls)];
         };
 
         return $this;
     }
 
-    public function expectMaxWords(int $maxWords): static
+    public function toHaveMaxWords(int $maxWords): static
     {
+        $this->ensureNotNegated('toHaveMaxWords');
+
         $this->expectationFactories[] = fn (): array => [new MaxWordsCheck($maxWords)];
 
         return $this;
     }
 
-    public function expectMentions(string|Closure ...$needles): static
+    public function toContain(string|Closure ...$needles): static
     {
+        $negated = $this->takeNegation();
+
         $this->expectationFactories[] = fn (Closure $resolve): array => array_map(
-            fn (string $needle): Check => new MentionsCheck($needle),
-            $this->resolveStrings($resolve, $needles, 'expectMentions()'),
+            fn (string $needle): Check => $negated ? new DoesNotContainCheck($needle) : new ContainsCheck($needle),
+            $this->resolveStrings($resolve, $needles, 'toContain()'),
         );
 
         return $this;
     }
 
-    public function expectMentionsInOrder(string|Closure ...$needles): static
+    public function toContainInOrder(string|Closure ...$needles): static
     {
+        $this->ensureNotNegated('toContainInOrder');
+
         $this->expectationFactories[] = fn (Closure $resolve): array => [
-            new MentionsInOrderCheck($this->resolveStrings($resolve, $needles, 'expectMentionsInOrder()')),
+            new ContainsInOrderCheck($this->resolveStrings($resolve, $needles, 'toContainInOrder()')),
         ];
 
         return $this;
     }
 
-    public function expectNotMentions(string|Closure ...$needles): static
+    public function toSatisfy(string|Closure $criterion): static
     {
+        $this->ensureNotNegated('toSatisfy');
+
         $this->expectationFactories[] = fn (Closure $resolve): array => array_map(
-            fn (string $needle): Check => new DoesNotMentionCheck($needle),
-            $this->resolveStrings($resolve, $needles, 'expectNotMentions()'),
+            fn (string $criterion): JudgeCriterion => new JudgeCriterion($criterion),
+            $this->resolveStrings($resolve, [$criterion], 'toSatisfy()'),
         );
 
         return $this;
     }
 
-    public function expectRubric(string|Closure ...$criteria): static
+    public function toPassCheck(string $label, Closure $check): static
     {
-        $this->expectationFactories[] = fn (Closure $resolve): array => array_map(
-            fn (string $criterion): RubricCriterion => new RubricCriterion($criterion),
-            $this->resolveStrings($resolve, $criteria, 'expectRubric()'),
-        );
+        $this->ensureNotNegated('toPassCheck');
 
-        return $this;
-    }
-
-    public function expectThat(string $label, Closure $check): static
-    {
         $this->expectationFactories[] = fn (Closure $resolve): array => [
             new ClosureCheck(
                 $label,
@@ -125,33 +133,85 @@ class Turn
         return $this;
     }
 
+    public function approveAll(): static
+    {
+        $this->ensureNotNegated('approveAll');
+
+        $this->approvesAll = true;
+
+        return $this;
+    }
+
+    public function prompt(string|Closure $prompt): Turn
+    {
+        $this->ensureNotNegated('prompt');
+
+        return $this->evaluation->prompt($prompt);
+    }
+
     /**
      * @param  Closure(mixed, array<string, mixed>=): mixed  $resolve
      * @return array<int, Expectation>
      */
     public function resolveExpectations(Closure $resolve): array
     {
-        $expectations = array_merge(...array_map(
+        if ($this->negated) {
+            throw new LogicException('->not must be followed by toContain() or toHaveToolCalls().');
+        }
+
+        return array_merge(...array_map(
             fn (Closure $factory): array => $factory($resolve),
             $this->expectationFactories,
         ));
-
-        return [
-            ...array_filter($expectations, fn (Expectation $expectation): bool => $expectation instanceof Check),
-            ...array_filter($expectations, fn (Expectation $expectation): bool => $expectation instanceof RubricCriterion),
-        ];
     }
 
-    public function approveAll(): static
+    /** @return array<int, Check> */
+    protected function toolChecks(mixed $tools, bool $negated): array
     {
-        $this->approvesAll = true;
+        if ($tools === null) {
+            throw new LogicException('A closure given to toHaveToolCalls() returned null.');
+        }
 
-        return $this;
+        $checks = [];
+
+        foreach (Arr::wrap($tools) as $key => $value) {
+            [$tool, $arguments] = is_int($key) ? [$value, null] : [$key, $value];
+
+            $this->ensureToolCall($tool, $arguments);
+
+            $checks[] = $negated
+                ? new DoesNotCallToolCheck($tool, $arguments)
+                : new CallsToolCheck($tool, $arguments);
+        }
+
+        return $checks;
     }
 
-    public function user(string|Closure $prompt): Turn
+    protected function takeNegation(): bool
     {
-        return $this->aiTest->user($prompt);
+        $negated = $this->negated;
+
+        $this->negated = false;
+
+        return $negated;
+    }
+
+    protected function ensureNotNegated(string $method): void
+    {
+        if ($this->negated) {
+            throw new LogicException("->not can't be used with {$method}(). It only works with toContain() and toHaveToolCalls().");
+        }
+    }
+
+    protected function ensureToolCall(mixed $tool, mixed $arguments): void
+    {
+        if (! is_string($tool) || $tool === '') {
+            throw new LogicException('The tools given to toHaveToolCalls() must be tool names or classes, but one is '.get_debug_type($tool).'.');
+        }
+
+        if ($arguments !== null && ! is_array($arguments) && ! $arguments instanceof Closure) {
+            throw new LogicException("The expected arguments of {$tool} given to toHaveToolCalls() must be an array or a closure, but are ".get_debug_type($arguments).'.');
+        }
     }
 
     /**
