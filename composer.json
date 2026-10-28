@@ -45,7 +45,7 @@
             "Spatie\\LaravelAiTests\\": "src/"
         },
         "files": [
-            "src/functions.php"
+            "src/helpers.php"
         ]
     },
     "autoload-dev": {
