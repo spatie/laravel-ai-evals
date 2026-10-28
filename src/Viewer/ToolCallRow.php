@@ -2,13 +2,15 @@
 
 namespace Spatie\LaravelAiTests\Viewer;
 
+use Spatie\LaravelAiTests\Transcript\ToolCallStatus;
+
 class ToolCallRow
 {
     /** @param array<string, mixed> $arguments */
     public function __construct(
         public string $name,
         public array $arguments,
-        public ?string $status,
+        public ?ToolCallStatus $status,
         public ?string $approval,
     ) {}
 
@@ -17,8 +19,8 @@ class ToolCallRow
     {
         return new self(
             name: Value::string($data['name'] ?? null) ?? '',
-            arguments: is_array($data['arguments'] ?? null) ? $data['arguments'] : [],
-            status: Value::string($data['status'] ?? null),
+            arguments: Value::array($data['arguments'] ?? null),
+            status: ToolCallStatus::tryFrom(Value::string($data['status'] ?? null) ?? ''),
             approval: Value::string($data['approval'] ?? null),
         );
     }
@@ -33,11 +35,13 @@ class ToolCallRow
     /** @return array<int, string> */
     public function details(): array
     {
-        $showsStatus = $this->status !== null && ! in_array($this->status, ['completed', $this->approval], true);
+        $showsStatus = $this->status !== null
+            && $this->status !== ToolCallStatus::Completed
+            && $this->status->value !== $this->approval;
 
         return array_values(array_filter([
             $this->approval,
-            $showsStatus ? str_replace('_', ' ', (string) $this->status) : null,
+            $showsStatus ? str_replace('_', ' ', $this->status->value) : null,
         ]));
     }
 }

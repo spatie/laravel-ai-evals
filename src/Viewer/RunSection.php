@@ -23,15 +23,15 @@ class RunSection
     public static function fromData(int $fallbackNumber, array $data): self
     {
         $number = is_numeric($data['run'] ?? null) ? (int) $data['run'] : $fallbackNumber;
-        $toolCalls = is_array($data['tool_calls'] ?? null) ? $data['tool_calls'] : [];
-        $verdicts = is_array($data['verdicts'] ?? null) ? $data['verdicts'] : [];
+        $toolCalls = Value::array($data['tool_calls'] ?? null);
+        $verdicts = Value::array($data['verdicts'] ?? null);
 
         return new self(
             number: $number,
             passed: ($data['passed'] ?? false) === true,
             crash: Value::string($data['crash'] ?? null),
             toolCalls: array_values(array_map(
-                fn (mixed $toolCall): ToolCallRow => ToolCallRow::fromData(is_array($toolCall) ? $toolCall : []),
+                fn (mixed $toolCall): ToolCallRow => ToolCallRow::fromData(Value::array($toolCall)),
                 $toolCalls,
             )),
             answer: Value::string($data['answer'] ?? null),
@@ -44,12 +44,12 @@ class RunSection
         );
     }
 
-    public function status(): string
+    public function status(): Status
     {
         return match (true) {
-            $this->passed => 'passed',
-            $this->unjudged() => 'unjudged',
-            default => 'failed',
+            $this->passed => Status::Passed,
+            $this->unjudged() => Status::Unjudged,
+            default => Status::Failed,
         };
     }
 
@@ -59,7 +59,7 @@ class RunSection
             return false;
         }
 
-        return array_filter($this->verdicts, fn (RunNote $verdict): bool => ! $verdict->passed) === [];
+        return collect($this->verdicts)->every(fn (RunNote $verdict): bool => $verdict->passed);
     }
 
     public function showsTranscript(): bool
@@ -73,6 +73,6 @@ class RunSection
             return null;
         }
 
-        return Html::markdown($this->answer);
+        return Html::markdown($this->answer, parentHeadingLevel: 4);
     }
 }

@@ -18,9 +18,12 @@ class ResultsSummary
     public static function of(Collection $results): self
     {
         return new self(
-            failedCount: $results->filter(fn (ResultFile $result): bool => $result->status() === 'failed')->count(),
-            passedCount: $results->filter(fn (ResultFile $result): bool => $result->status() === 'passed')->count(),
-            lastRun: $results->map(fn (ResultFile $result): ?CarbonImmutable => $result->ranAt())->filter()->max(),
+            failedCount: $results->filter(fn (ResultFile $result): bool => $result->status() === Status::Failed)->count(),
+            passedCount: $results->filter(fn (ResultFile $result): bool => $result->status() === Status::Passed)->count(),
+            lastRun: $results
+                ->map(fn (ResultFile $result): ?CarbonImmutable => $result->ranAt())
+                ->filter()
+                ->max(),
             usualMinPassRate: static::usualMinPassRate($results),
         );
     }

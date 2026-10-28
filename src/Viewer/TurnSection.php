@@ -20,21 +20,19 @@ class TurnSection
     /** @param array<string, mixed> $data */
     public static function fromData(int $number, array $data): self
     {
-        $checks = is_array($data['checks'] ?? null) ? array_values($data['checks']) : [];
-        $runs = is_array($data['runs'] ?? null) ? array_values($data['runs']) : [];
+        $checks = array_values(Value::array($data['checks'] ?? null));
+        $runs = array_values(Value::array($data['runs'] ?? null));
 
         return new self(
             number: $number,
             prompt: Value::string($data['prompt'] ?? null),
             checks: array_map(
-                fn (mixed $check): CheckRow => CheckRow::fromData(is_array($check) ? $check : []),
+                fn (mixed $check): CheckRow => CheckRow::fromData(Value::array($check)),
                 $checks,
             ),
-            runs: array_map(
-                fn (mixed $run, int $index): RunSection => RunSection::fromData($index + 1, is_array($run) ? $run : []),
-                $runs,
-                array_keys($runs),
-            ),
+            runs: collect($runs)
+                ->map(fn (mixed $run, int $index): RunSection => RunSection::fromData($index + 1, Value::array($run)))
+                ->all(),
         );
     }
 
@@ -42,18 +40,19 @@ class TurnSection
     {
         return count(array_filter(
             $this->checks,
-            fn (CheckRow $check): bool => ! in_array($check->status(), ['failed', 'partial'], true),
+            fn (CheckRow $check): bool => $check->status() === Status::Passed,
         ));
     }
 
-    public function checksStatus(): string
+    public function checksStatus(): Status
     {
-        $statuses = array_map(fn (CheckRow $check): string => $check->status(), $this->checks);
+        $statuses = array_map(fn (CheckRow $check): Status => $check->status(), $this->checks);
 
         return match (true) {
-            in_array('failed', $statuses, true) => 'failed',
-            in_array('partial', $statuses, true) => 'partial',
-            default => 'passed',
+            in_array(Status::Failed, $statuses, true) => Status::Failed,
+            in_array(Status::Partial, $statuses, true) => Status::Partial,
+            in_array(Status::Unknown, $statuses, true) => Status::Unknown,
+            default => Status::Passed,
         };
     }
 

@@ -127,25 +127,30 @@ it('returns a 404 outside the local environment', function () {
     $this->get('/ai-tests')->assertNotFound();
 });
 
-it('shows a run the judge could not grade as unjudged', function () {
+it('shows runs and checks the judge could not grade as unjudged', function () {
     writeResultFile('unjudged', [
         'title' => 'Unjudged',
-        'passed' => true,
+        'passed' => false,
         'runs' => 2,
-        'passed_runs' => 1,
-        'unjudged_runs' => 1,
+        'passed_runs' => 0,
+        'unjudged_runs' => 2,
         'turns' => [[
             'prompt' => 'Where is my order?',
+            'checks' => [
+                ['label' => 'Says when it shipped.', 'kind' => 'rubric', 'passed_runs' => 0, 'runs' => []],
+            ],
             'runs' => [
                 ['run' => 1, 'passed' => false, 'judge_error' => 'RuntimeException: The judge is rate limited.', 'tool_calls' => [], 'answer' => 'It shipped.'],
-                ['run' => 2, 'passed' => true, 'tool_calls' => [], 'answer' => 'It shipped.'],
+                ['run' => 2, 'passed' => false, 'judge_error' => 'RuntimeException: The judge is rate limited.', 'tool_calls' => [], 'answer' => 'It shipped.'],
             ],
         ]],
     ]);
 
     $this->get('/ai-tests/unjudged')
         ->assertOk()
-        ->assertSee('1 unjudged, left out of the pass rate')
+        ->assertSee('2 unjudged, left out of the pass rate')
+        ->assertSee('0 of 1 checks passed in every run')
+        ->assertSee('<tr class="check-unknown">', escape: false)
         ->assertSeeInOrder(['Judge errors', 'Run 1', 'RuntimeException: The judge is rate limited.'])
         ->assertSee('Run 1, unjudged');
 });

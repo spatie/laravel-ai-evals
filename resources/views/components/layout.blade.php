@@ -108,7 +108,7 @@
         .prose p, .prose ul, .prose ol, .prose pre, .prose blockquote, .prose table { margin: 0 0 12px; }
         .prose ul, .prose ol { padding-left: 22px; }
         .prose li + li { margin-top: 3px; }
-        .prose h1, .prose h2, .prose h3, .prose h4 { margin: 20px 0 8px; font-size: 15px; }
+        .prose h5, .prose h6 { margin: 20px 0 8px; font-size: 15px; }
         .prose blockquote { padding: 2px 0 2px 14px; border-left: 1px solid var(--border-strong); color: var(--muted); }
         .prose a { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--link) 45%, transparent); }
         .prose hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }

@@ -141,7 +141,7 @@
                         title="Previous test: {{ $navigation->previous->title() }} (K)"
                     >
                         <x-ai-tests::chevron direction="previous" />
-                        <span class="pager-dot is-{{ $navigation->previous->status() }}" aria-hidden="true"></span>
+                        <span class="pager-dot is-{{ $navigation->previous->status()->value }}" aria-hidden="true"></span>
                         <span class="pager-title">{{ $navigation->previous->title() }}</span>
                     </a>
                 @else
@@ -162,7 +162,7 @@
                         title="Next test: {{ $navigation->next->title() }} (J)"
                     >
                         <span class="pager-title">{{ $navigation->next->title() }}</span>
-                        <span class="pager-dot is-{{ $navigation->next->status() }}" aria-hidden="true"></span>
+                        <span class="pager-dot is-{{ $navigation->next->status()->value }}" aria-hidden="true"></span>
                         <x-ai-tests::chevron direction="next" />
                     </a>
                 @else
@@ -230,7 +230,7 @@
             <div class="turn-header">
                 <h2 id="turn-{{ $turn->number }}-heading">Turn {{ $turn->number }}</h2>
                 @if ($turn->checks !== [])
-                    <span @class(['turn-summary', 'numeric', 'turn-summary-'.$turn->checksStatus()])>{{ $turn->checksPassedInEveryRun() }} of {{ count($turn->checks) }} checks passed in every run</span>
+                    <span @class(['turn-summary', 'numeric', 'turn-summary-'.$turn->checksStatus()->value])>{{ $turn->checksPassedInEveryRun() }} of {{ count($turn->checks) }} checks passed in every run</span>
                 @endif
             </div>
 
@@ -252,7 +252,7 @@
                         </thead>
                         <tbody>
                             @foreach ($turn->checks as $check)
-                                <tr class="check-{{ $check->status() }}">
+                                <tr class="check-{{ $check->status()->value }}">
                                     <td>{!! $check->labelHtml() !!}</td>
                                     <td><x-ai-tests::runs :passed="$check->passedRuns()" :runs="$check->runCount()" /></td>
                                 </tr>
@@ -319,10 +319,10 @@
                         @foreach ($turn->runs as $run)
                             <button
                                 type="button"
-                                class="tab tab-{{ $run->status() }}"
+                                class="tab tab-{{ $run->status()->value }}"
                                 id="turn-{{ $turn->number }}-run-{{ $run->number }}-tab"
                                 aria-controls="turn-{{ $turn->number }}-run-{{ $run->number }}"
-                                aria-label="Run {{ $run->number }}, {{ $run->status() }}"
+                                aria-label="Run {{ $run->number }}, {{ $run->status()->value }}"
                                 @if ($run === $selectedRun) data-selected @endif
                             >
                                 <span class="tab-dot" aria-hidden="true"></span>
@@ -332,82 +332,7 @@
                     </div>
 
                     @foreach ($turn->runs as $run)
-                        @php($answerHtml = $run->answerHtml())
-                        <section class="run" id="turn-{{ $turn->number }}-run-{{ $run->number }}" aria-label="Run {{ $run->number }}, {{ $run->status() }}">
-                            <div class="run-header">
-                                <h4>Run {{ $run->number }}</h4>
-                                <x-ai-tests::status :status="$run->status()" />
-                            </div>
-
-                            @if ($run->notReached)
-                                <div class="run-section">
-                                    <p class="muted">This run crashed in an earlier turn.</p>
-                                </div>
-                            @else
-                                @if ($run->crash !== null)
-                                    <div class="run-section">
-                                        <span class="run-section-label">Crash</span>
-                                        <p class="crash">{{ $run->crash }}</p>
-                                    </div>
-                                @endif
-
-                                @if ($run->judgeError !== null)
-                                    <div class="run-section">
-                                        <span class="run-section-label">Judge error</span>
-                                        <p class="crash">{{ $run->judgeError }}</p>
-                                    </div>
-                                @endif
-
-                                @if ($run->showsTranscript())
-                                    <div class="run-section">
-                                        <span class="run-section-label">Tool calls</span>
-                                        @if ($run->toolCalls === [])
-                                            <span class="muted">None</span>
-                                        @else
-                                            <ol class="tool-calls">
-                                                @foreach ($run->toolCalls as $toolCall)
-                                                    <li>
-                                                        <span class="tool-name">{{ $toolCall->name }}</span>
-                                                        @if ($toolCall->argumentList() !== '')
-                                                            <span class="tool-arguments">({{ $toolCall->argumentList() }})</span>
-                                                        @endif
-                                                        @if ($toolCall->details() !== [])
-                                                            <span class="tool-details">{{ implode(', ', $toolCall->details()) }}</span>
-                                                        @endif
-                                                    </li>
-                                                @endforeach
-                                            </ol>
-                                        @endif
-                                    </div>
-
-                                    <div class="answer prose run-section">
-                                        @if ($answerHtml !== null)
-                                            {!! $answerHtml !!}
-                                        @else
-                                            <p class="muted">No answer text.</p>
-                                        @endif
-                                    </div>
-                                @endif
-
-                                @if ($run->verdicts !== [])
-                                    <div class="run-section">
-                                        <span class="run-section-label">Verdicts</span>
-                                        <ul class="verdicts">
-                                            @foreach ($run->verdicts as $verdict)
-                                                <li class="verdict-{{ $verdict->passed ? 'passed' : 'failed' }}">
-                                                    <div>
-                                                        <p class="verdict-check"><span class="visually-hidden">{{ $verdict->passed ? 'Passed' : 'Failed' }}: </span>{!! $verdict->checkHtml() !!}</p>
-                                                        @if ($verdict->reason !== null)
-                                                            <p class="verdict-reason">{{ $verdict->reason }}</p>
-                                                        @endif
-                                                    </div>
-                                                </li>
-                                            @endforeach
-                                        </ul>
-                                    </div>
-                                @endif
-                            @endif
-                        </section>
+                        <x-ai-tests::run :run="$run" :turn-number="$turn->number" />
                     @endforeach
                 </section>
             @endif
@@ -423,7 +348,7 @@
                         Previous test
                     </span>
                     <span class="pager-card-title">
-                        <span class="pager-dot is-{{ $navigation->previous->status() }}" aria-hidden="true"></span>
+                        <span class="pager-dot is-{{ $navigation->previous->status()->value }}" aria-hidden="true"></span>
                         {{ $navigation->previous->title() }}
                     </span>
                 </a>
@@ -437,7 +362,7 @@
                     </span>
                     <span class="pager-card-title">
                         {{ $navigation->next->title() }}
-                        <span class="pager-dot is-{{ $navigation->next->status() }}" aria-hidden="true"></span>
+                        <span class="pager-dot is-{{ $navigation->next->status()->value }}" aria-hidden="true"></span>
                     </span>
                 </a>
             @endif

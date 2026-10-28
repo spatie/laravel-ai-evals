@@ -13,7 +13,7 @@ class CheckRow
     /** @param array<string, mixed> $data */
     public static function fromData(array $data): self
     {
-        $runs = is_array($data['runs'] ?? null) ? $data['runs'] : [];
+        $runs = Value::array($data['runs'] ?? null);
 
         return new self(
             label: Value::string($data['label'] ?? null) ?? '',
@@ -36,13 +36,8 @@ class CheckRow
         return count($this->runs);
     }
 
-    public function status(): string
+    public function status(): Status
     {
-        return match (true) {
-            $this->runs === [] => 'unknown',
-            $this->passedRuns() === $this->runCount() => 'passed',
-            $this->passedRuns() === 0 => 'failed',
-            default => 'partial',
-        };
+        return Status::fromCounts($this->passedRuns(), $this->runCount());
     }
 }

@@ -43,7 +43,7 @@ class ResultFile
             ->filter(fn (SplFileInfo $file): bool => $file->getExtension() === 'yaml')
             ->map(fn (SplFileInfo $file): self => self::fromPath($file->getPathname()))
             ->sortBy([
-                fn (self $a, self $b): int => ($a->status() !== 'failed') <=> ($b->status() !== 'failed'),
+                fn (self $a, self $b): int => ($a->status() !== Status::Failed) <=> ($b->status() !== Status::Failed),
                 fn (self $a, self $b): int => strcasecmp($a->title(), $b->title()),
             ])
             ->values();
@@ -64,15 +64,13 @@ class ResultFile
         return Value::string($this->get($key));
     }
 
-    public function status(): string
+    public function status(): Status
     {
-        $passed = $this->get('passed');
-
-        if (! is_bool($passed)) {
-            return 'unknown';
-        }
-
-        return $passed ? 'passed' : 'failed';
+        return match ($this->get('passed')) {
+            true => Status::Passed,
+            false => Status::Failed,
+            default => Status::Unknown,
+        };
     }
 
     /** @return array<string, mixed> */
@@ -88,7 +86,7 @@ class ResultFile
     /** @return array<string, string> */
     public function context(): array
     {
-        $context = is_array($this->get('context')) ? $this->get('context') : [];
+        $context = Value::array($this->get('context'));
 
         $entries = array_map(fn (mixed $value): ?string => Value::string($value), $context);
 
@@ -101,13 +99,11 @@ class ResultFile
 
     public function contextLine(): ?string
     {
-        $entries = array_map(
-            fn (string $label, string $value): string => "{$label}: {$value}",
-            array_keys($this->context()),
-            $this->context(),
-        );
+        $line = collect($this->context())
+            ->map(fn (string $value, string $label): string => "{$label}: {$value}")
+            ->implode(' · ');
 
-        return $entries !== [] ? implode(' · ', $entries) : null;
+        return $line !== '' ? $line : null;
     }
 
     public function ranAt(): ?CarbonImmutable
@@ -120,7 +116,9 @@ class ResultFile
                 is_string($ranAt) => CarbonImmutable::parse($ranAt),
                 default => null,
             };
-        } catch (InvalidFormatException) {
+        } catch (InvalidFormatException $exception) {
+            report($exception);
+
             return null;
         }
     }
@@ -135,12 +133,9 @@ class ResultFile
     /** @return array<int, TurnSection> */
     public function turns(): array
     {
-        $turns = is_array($this->get('turns')) ? array_values($this->get('turns')) : [];
-
-        return array_map(
-            fn (mixed $turn, int $index): TurnSection => TurnSection::fromData($index + 1, is_array($turn) ? $turn : []),
-            $turns,
-            array_keys($turns),
-        );
+        return collect(Value::array($this->get('turns')))
+            ->values()
+            ->map(fn (mixed $turn, int $index): TurnSection => TurnSection::fromData($index + 1, Value::array($turn)))
+            ->all();
     }
 }
