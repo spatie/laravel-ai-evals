@@ -8,7 +8,6 @@ use Illuminate\Support\Str;
 use Spatie\LaravelAiTests\Checks\Expectation;
 use Spatie\LaravelAiTests\Transcript\ToolCallRecord;
 use Spatie\LaravelAiTests\Transcript\Transcript;
-use Spatie\LaravelAiTests\Turn;
 use Symfony\Component\Yaml\Yaml;
 
 class ResultWriter
@@ -41,7 +40,7 @@ class ResultWriter
             Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK | Yaml::DUMP_COMPACT_NESTED_MAPPING | Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE,
         );
 
-        return str_ends_with($yaml, "\n") ? $yaml : "{$yaml}\n";
+        return Str::finish($yaml, "\n");
     }
 
     /** @return array<string, mixed> */
@@ -64,8 +63,7 @@ class ResultWriter
         ]);
 
         $turns = array_map(
-            fn (Turn $turn, int $index): array => $this->turn($result, $turn, $index),
-            $result->aiTest->turns,
+            fn (int $index): array => $this->turn($result, $index),
             array_keys($result->aiTest->turns),
         );
 
@@ -73,7 +71,7 @@ class ResultWriter
     }
 
     /** @return array<string, mixed> */
-    protected function turn(TestResult $result, Turn $turn, int $index): array
+    protected function turn(TestResult $result, int $index): array
     {
         return [
             'prompt' => $this->normalizeLineEndings($result->prompts[$index]),
@@ -86,34 +84,43 @@ class ResultWriter
     protected function checks(TestResult $result, int $index): array
     {
         return array_map(function (Expectation $expectation) use ($result, $index): array {
-            $runs = [];
-
-            foreach ($result->runs as $run) {
-                $turnResult = $run->turns[$index] ?? null;
-                $outcome = $turnResult?->outcomeFor($expectation);
-
-                if ($outcome === null && $turnResult?->judgeError !== null) {
-                    continue;
-                }
-
-                $runs[$run->number] = $outcome->passed ?? false;
-            }
+            $runs = $this->checkRuns($result, $expectation, $index);
 
             return [
                 'label' => $expectation->label(),
-                'kind' => $expectation->kind(),
+                'kind' => $expectation->kind()->value,
                 'passed_runs' => count(array_filter($runs)),
                 'runs' => $runs,
             ];
         }, $result->expectations[$index]);
     }
 
+    /** @return array<int, bool> */
+    protected function checkRuns(TestResult $result, Expectation $expectation, int $index): array
+    {
+        $runs = [];
+
+        foreach ($result->runs as $run) {
+            $turnResult = $run->turns[$index] ?? null;
+            $outcome = $turnResult?->outcomeFor($expectation);
+
+            if ($outcome === null && $turnResult?->judgeError !== null) {
+                continue;
+            }
+
+            $runs[$run->number] = $outcome->passed ?? false;
+        }
+
+        return $runs;
+    }
+
     /** @return array<string, mixed> */
     protected function run(RunResult $run, int $index): array
     {
         $turnResult = $run->turns[$index] ?? null;
+        $crashedInThisTurn = $turnResult === null && count($run->turns) === $index;
 
-        if ($turnResult === null && count($run->turns) === $index) {
+        if ($crashedInThisTurn) {
             return $this->crashedRun($run);
         }
 

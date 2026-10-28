@@ -14,14 +14,14 @@ class MentionsInOrderCheck extends Check
 
     public function label(): string
     {
-        $quoted = array_map(fn (string $needle): string => MentionsCheck::quote($needle), $this->needles);
+        $quoted = array_map(fn (string $needle): string => static::quote($needle), $this->needles);
 
         return 'Mentions '.implode(', then ', $quoted);
     }
 
-    public function kind(): string
+    public function kind(): ExpectationKind
     {
-        return 'mentions';
+        return ExpectationKind::Mentions;
     }
 
     public function evaluate(Transcript $transcript): CheckOutcome
@@ -38,21 +38,23 @@ class MentionsInOrderCheck extends Check
     protected function failureReason(string $answer): ?string
     {
         $previousNeedle = null;
-        $previousPosition = -1;
+        $offset = 0;
 
         foreach ($this->needles as $needle) {
-            $position = mb_strpos($answer, $needle);
+            $position = mb_stripos($answer, $needle, $offset);
 
-            if ($position === false) {
-                return "Does not mention {$needle}.";
+            if ($position !== false) {
+                $previousNeedle = $needle;
+                $offset = $position + 1;
+
+                continue;
             }
 
-            if ($position <= $previousPosition) {
-                return "Mentions {$needle} before {$previousNeedle}.";
+            if (mb_stripos($answer, $needle) === false) {
+                return 'Does not mention '.static::quote($needle).'.';
             }
 
-            $previousNeedle = $needle;
-            $previousPosition = $position;
+            return 'Mentions '.static::quote($needle).' before '.static::quote($previousNeedle).'.';
         }
 
         return null;

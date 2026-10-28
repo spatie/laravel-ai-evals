@@ -21,9 +21,9 @@ class ClosureCheck extends Check
         return $this->label;
     }
 
-    public function kind(): string
+    public function kind(): ExpectationKind
     {
-        return 'code';
+        return ExpectationKind::Code;
     }
 
     public function evaluate(Transcript $transcript): CheckOutcome

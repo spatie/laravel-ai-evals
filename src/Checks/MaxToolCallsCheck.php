@@ -16,9 +16,9 @@ class MaxToolCallsCheck extends Check
         return "At most {$this->maxCalls} tool calls";
     }
 
-    public function kind(): string
+    public function kind(): ExpectationKind
     {
-        return 'tool';
+        return ExpectationKind::Tool;
     }
 
     public function evaluate(Transcript $transcript): CheckOutcome

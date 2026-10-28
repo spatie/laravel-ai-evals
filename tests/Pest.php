@@ -23,3 +23,12 @@ function writeResultFile(string $slug, array $data): void
 {
     File::put(config('ai-tests.results_path')."/{$slug}.yaml", Yaml::dump($data));
 }
+
+/**
+ * @param  array<string, mixed>  $turn
+ * @return array<int, array{0: string, 1: string, 2: int}>
+ */
+function checkSummaries(array $turn): array
+{
+    return array_map(fn (array $check) => [$check['label'], $check['kind'], $check['passed_runs']], $turn['checks']);
+}

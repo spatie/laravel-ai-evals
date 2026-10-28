@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Responses\Data\ToolCall;
 use PHPUnit\Framework\AssertionFailedError;
+use Spatie\LaravelAiTests\Tests\TestSupport\LookupOrderTool;
 use Spatie\LaravelAiTests\Tests\TestSupport\ShopDriver;
 use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
 use Spatie\LaravelAiTests\Transcript\ToolCallRecord;
@@ -23,7 +24,7 @@ it('checks a turn with code against the transcript and the data of the run', fun
         ->user('Where is order 1234?')
         ->expectThat('Looks up order 1234', fn (Transcript $transcript) => array_map(
             fn (ToolCallRecord $toolCall) => [$toolCall->arguments, $toolCall->result],
-            array_values($transcript->toolCalls),
+            array_values($transcript->callsTo(LookupOrderTool::class)),
         ) === [[['order' => '1234'], 'Order 1234 shipped yesterday.']])
         ->expectThat('Stores the conversation of the customer', fn ($driver) => DB::table('agent_conversations')
             ->where('participant_id', $driver->customer->id)
@@ -38,7 +39,7 @@ it('checks a turn with code against the transcript and the data of the run', fun
 
     $turns = resultFile('checks-the-order-lookup-with-code')->get('turns');
 
-    expect(array_map(fn (array $check) => [$check['label'], $check['kind'], $check['passed_runs']], $turns[0]['checks']))->toBe([
+    expect(checkSummaries($turns[0]))->toBe([
         ['Looks up order 1234', 'code', 1],
         ['Stores the conversation of the customer', 'code', 1],
         ['Offers a tracking link', 'code', 0],

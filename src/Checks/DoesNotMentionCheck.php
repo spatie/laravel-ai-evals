@@ -13,12 +13,12 @@ class DoesNotMentionCheck extends Check
 
     public function label(): string
     {
-        return 'Does not mention '.MentionsCheck::quote($this->needle);
+        return 'Does not mention '.static::quote($this->needle);
     }
 
-    public function kind(): string
+    public function kind(): ExpectationKind
     {
-        return 'mentions';
+        return ExpectationKind::Mentions;
     }
 
     public function evaluate(Transcript $transcript): CheckOutcome
@@ -28,7 +28,7 @@ class DoesNotMentionCheck extends Check
         return new CheckOutcome(
             expectation: $this,
             passed: $match === null,
-            reason: $match === null ? null : 'Mentions '.MentionsCheck::quote($match).'.',
+            reason: $match === null ? null : 'Mentions '.static::quote($match).'.',
         );
     }
 

@@ -8,39 +8,28 @@ use Spatie\LaravelAiTests\Transcript\Transcript;
 
 class MentionsCheck extends Check
 {
-    protected const MaxLabelLength = 60;
-
     public function __construct(
         protected string $needle,
     ) {}
-
-    public static function quote(string $needle): string
-    {
-        if (Str::length($needle) <= static::MaxLabelLength) {
-            return "`{$needle}`";
-        }
-
-        return '`'.Str::substr($needle, 0, 25).'…'.Str::substr($needle, -34).'`';
-    }
 
     public function label(): string
     {
         return 'Mentions '.static::quote($this->needle);
     }
 
-    public function kind(): string
+    public function kind(): ExpectationKind
     {
-        return 'mentions';
+        return ExpectationKind::Mentions;
     }
 
     public function evaluate(Transcript $transcript): CheckOutcome
     {
-        $mentioned = str_contains($transcript->answer(), $this->needle);
+        $mentioned = Str::contains($transcript->answer(), $this->needle, ignoreCase: true);
 
         return new CheckOutcome(
             expectation: $this,
             passed: $mentioned,
-            reason: $mentioned ? null : "Does not mention {$this->needle}.",
+            reason: $mentioned ? null : 'Does not mention '.static::quote($this->needle).'.',
         );
     }
 }

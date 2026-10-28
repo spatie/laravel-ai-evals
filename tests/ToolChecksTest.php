@@ -35,7 +35,7 @@ it('checks which tools the agent called', function () {
 
     $turn = resultFile('looks-up-the-order')->get('turns')[0];
 
-    expect(array_map(fn (array $check) => [$check['label'], $check['kind'], $check['passed_runs']], $turn['checks']))->toBe([
+    expect(checkSummaries($turn))->toBe([
         ['Calls `lookup_order`', 'tool', 1],
         ['Does not call `cancel_order`', 'tool', 1],
         ['At most 1 tool calls', 'tool', 1],

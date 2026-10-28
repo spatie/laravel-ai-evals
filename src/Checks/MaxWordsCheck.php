@@ -16,9 +16,9 @@ class MaxWordsCheck extends Check
         return "At most {$this->maxWords} words";
     }
 
-    public function kind(): string
+    public function kind(): ExpectationKind
     {
-        return 'max_words';
+        return ExpectationKind::MaxWords;
     }
 
     public function evaluate(Transcript $transcript): CheckOutcome

@@ -13,8 +13,8 @@ class RubricCriterion implements Expectation
         return $this->criterion;
     }
 
-    public function kind(): string
+    public function kind(): ExpectationKind
     {
-        return 'rubric';
+        return ExpectationKind::Rubric;
     }
 }

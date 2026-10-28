@@ -7,6 +7,7 @@ use Laravel\Ai\Approvals\PendingApproval;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
+use Spatie\LaravelAiTests\ToolName;
 
 class Transcript
 {
@@ -53,10 +54,15 @@ class Transcript
         }
     }
 
-    /** @return array<int, string> */
-    public function toolNames(): array
+    /** @return array<string, ToolCallRecord> */
+    public function callsTo(string $tool): array
     {
-        return array_column($this->toolCalls, 'name');
+        $name = ToolName::of($tool);
+
+        return array_filter(
+            $this->toolCalls,
+            fn (ToolCallRecord $toolCall): bool => $toolCall->name === $name,
+        );
     }
 
     public function answer(): string

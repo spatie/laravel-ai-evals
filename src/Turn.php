@@ -53,15 +53,15 @@ class Turn
 
             $maxCalls = $resolve($maxCalls);
 
-            if ($maxCalls !== null && ! is_int($maxCalls)) {
+            if ($maxCalls === null) {
+                return $checks;
+            }
+
+            if (! is_int($maxCalls)) {
                 throw new LogicException('The maximum number of tool calls given to expectTools() must be an integer, but is '.get_debug_type($maxCalls).'.');
             }
 
-            if ($maxCalls !== null) {
-                $checks[] = new MaxToolCallsCheck($maxCalls);
-            }
-
-            return $checks;
+            return [...$checks, new MaxToolCallsCheck($maxCalls)];
         };
 
         return $this;
