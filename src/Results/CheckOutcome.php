@@ -3,6 +3,7 @@
 namespace Spatie\LaravelAiTests\Results;
 
 use Spatie\LaravelAiTests\Checks\Expectation;
+use Spatie\LaravelAiTests\Checks\RubricCriterion;
 
 class CheckOutcome
 {
@@ -19,6 +20,6 @@ class CheckOutcome
 
     public function judged(): bool
     {
-        return $this->expectation->kind() === 'rubric';
+        return $this->expectation instanceof RubricCriterion;
     }
 }

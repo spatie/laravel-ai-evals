@@ -19,17 +19,8 @@ class RunResult
 
     public function passed(): bool
     {
-        if ($this->crash !== null) {
-            return false;
-        }
-
-        foreach ($this->turns as $turn) {
-            if (! $turn->passed()) {
-                return false;
-            }
-        }
-
-        return true;
+        return $this->crash === null
+            && collect($this->turns)->every(fn (TurnResult $turn): bool => $turn->passed());
     }
 
     public function unjudged(): bool
@@ -38,17 +29,10 @@ class RunResult
             return false;
         }
 
-        $unjudged = false;
+        $turns = collect($this->turns);
 
-        foreach ($this->turns as $turn) {
-            if ($turn->failed()) {
-                return false;
-            }
-
-            $unjudged = $unjudged || $turn->unjudged();
-        }
-
-        return $unjudged;
+        return ! $turns->contains(fn (TurnResult $turn): bool => $turn->failed())
+            && $turns->contains(fn (TurnResult $turn): bool => $turn->unjudged());
     }
 
     /** @return array<int, string> */

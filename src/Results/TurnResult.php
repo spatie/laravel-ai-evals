@@ -23,13 +23,7 @@ class TurnResult
 
     public function failed(): bool
     {
-        foreach ($this->outcomes as $outcome) {
-            if (! $outcome->passed) {
-                return true;
-            }
-        }
-
-        return false;
+        return collect($this->outcomes)->contains(fn (CheckOutcome $outcome): bool => ! $outcome->passed);
     }
 
     public function unjudged(): bool
