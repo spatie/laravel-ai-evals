@@ -17,7 +17,7 @@ class JudgeAgent implements Agent, HasStructuredOutput
         return <<<'PROMPT'
         You grade the last turn of a conversation between a user and an AI assistant.
 
-        You may first get the earlier turns of the conversation: each user message, the tool calls the assistant made without their results, and the assistant's answer. They are context only, for example to know what "those three errors" refers to. Do not grade the earlier turns, and do not count their tool calls as calls made in the turn you grade.
+        You may first get the earlier turns of the conversation: each user message, the tool calls the assistant made without their results, and the assistant's answer. They are context only, for example to know what "those three orders" refers to. Do not grade the earlier turns, and do not count their tool calls as calls made in the turn you grade.
 
         Then you get the turn to grade: the user's message, every tool call the assistant made in this turn with its arguments, status and a truncated result, and the assistant's answer. Then you get numbered criteria.
 

@@ -2,6 +2,7 @@
 
 namespace Spatie\LaravelAiTests\Judge;
 
+use Illuminate\Support\Collection;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use LogicException;
@@ -34,13 +35,15 @@ class Judge
             throw new LogicException('The judge agent '.$agent::class.' must have structured output.');
         }
 
-        $verdicts = collect($response['verdicts'] ?? [])->keyBy('criterion');
+        $verdicts = collect($response['verdicts'] ?? []);
 
-        $outcomes = array_map(
-            fn (RubricCriterion $criterion, int $index): CheckOutcome => $this->outcome($criterion, $verdicts->get($index + 1)),
-            array_values($rubric),
-            array_keys(array_values($rubric)),
-        );
+        $this->ensureOneVerdictPerCriterion($verdicts, count($rubric));
+
+        $verdicts = $verdicts->keyBy('criterion');
+
+        $outcomes = collect(array_values($rubric))
+            ->map(fn (RubricCriterion $criterion, int $index): CheckOutcome => $this->outcome($criterion, $verdicts->get($index + 1)))
+            ->all();
 
         return new JudgeResult($outcomes, $response->meta->model);
     }
@@ -84,8 +87,7 @@ class Judge
             $lines[] = '';
         }
 
-        $lines[] = 'Assistant answer:';
-        $lines[] = $transcript->answer() !== '' ? $transcript->answer() : '(no text)';
+        $lines[] = $this->answer($transcript);
 
         return implode("\n", $lines);
     }
@@ -99,10 +101,16 @@ class Judge
             $lines[] = '';
         }
 
-        $lines[] = 'Assistant answer:';
-        $lines[] = $transcript->answer() !== '' ? $transcript->answer() : '(no text)';
+        $lines[] = $this->answer($transcript);
 
         return implode("\n", $lines);
+    }
+
+    protected function answer(Transcript $transcript): string
+    {
+        $answer = $transcript->answer() !== '' ? $transcript->answer() : '(no text)';
+
+        return "Assistant answer:\n{$answer}";
     }
 
     protected function toolCall(ToolCallRecord $toolCall): string
@@ -129,13 +137,23 @@ class Judge
             ->implode("\n");
     }
 
-    /** @param array{criterion: int, reason: string, pass: bool}|null $verdict */
-    protected function outcome(RubricCriterion $criterion, ?array $verdict): CheckOutcome
+    /** @param Collection<int, array{criterion: int, reason: string, pass: bool}> $verdicts */
+    protected function ensureOneVerdictPerCriterion(Collection $verdicts, int $criterionCount): void
     {
-        if ($verdict === null) {
-            return new CheckOutcome($criterion, passed: false, reason: 'The judge returned no verdict.');
-        }
+        $numbers = $verdicts
+            ->map(fn (array $verdict): int => $verdict['criterion'])
+            ->sort()
+            ->values()
+            ->all();
 
+        if ($numbers !== range(1, $criterionCount)) {
+            throw new LogicException("The judge must return one verdict for each criterion from 1 to {$criterionCount}, but returned verdicts for criteria [".implode(', ', $numbers).'].');
+        }
+    }
+
+    /** @param array{criterion: int, reason: string, pass: bool} $verdict */
+    protected function outcome(RubricCriterion $criterion, array $verdict): CheckOutcome
+    {
         return new CheckOutcome($criterion, passed: $verdict['pass'], reason: $verdict['reason']);
     }
 }

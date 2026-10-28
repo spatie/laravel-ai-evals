@@ -9,7 +9,10 @@ use Spatie\LaravelAiTests\Tests\TestSupport\ShopDriver;
 use Spatie\LaravelAiTests\Tests\TestSupport\SupportAgent;
 
 it('matches verdicts to criteria by number', function () {
-    SupportAgent::fake(['Order 1234 shipped.']);
+    SupportAgent::fake([
+        new ToolCall('call-1', 'lookup_order', ['order' => '1234']),
+        'Order 1234 shipped.',
+    ]);
 
     JudgeAgent::fake([
         ['verdicts' => [
@@ -21,21 +24,45 @@ it('matches verdicts to criteria by number', function () {
     $aiTest = makeAiTest('names the order');
 
     $aiTest
-        ->driver(new AgentDriver(SupportAgent::class))
+        ->driver(fn () => ShopDriver::forNewCustomer())
         ->runs(1)
         ->user('Where is my order?')
-        ->expectRubric('Names the order.', 'Is polite.', 'Gives a date.');
+        ->expectRubric('Names the order.', 'Is polite.');
 
     expect(fn () => $aiTest->execute())->toThrow(AssertionFailedError::class);
 
     expect(resultFile('names-the-order')->get('turns')[0]['runs'][0]['verdicts'])->toBe([
         ['check' => 'Names the order.', 'passed' => true, 'reason' => 'It names the order.'],
         ['check' => 'Is polite.', 'passed' => false, 'reason' => 'It is rude.'],
-        ['check' => 'Gives a date.', 'passed' => false, 'reason' => 'The judge returned no verdict.'],
     ]);
 
-    JudgeAgent::assertPrompted(fn (AgentPrompt $prompt) => str_contains($prompt->prompt, "Assistant answer:\nOrder 1234 shipped.")
-        && str_contains($prompt->prompt, "1. Names the order.\n2. Is polite.\n3. Gives a date."));
+    JudgeAgent::assertPrompted(fn (AgentPrompt $prompt) => str_contains($prompt->prompt, "Tool call `lookup_order` {\"order\":\"1234\"} (completed)\nResult: Order 1234 shipped yesterday.")
+        && str_contains($prompt->prompt, "Assistant answer:\nOrder 1234 shipped.")
+        && str_contains($prompt->prompt, "1. Names the order.\n2. Is polite."));
+});
+
+it('treats a missing verdict as a judge error, and still fails a run that failed a check', function () {
+    SupportAgent::fake(['Order 1234 shipped yesterday, as planned.', 'Order 1234 shipped.']);
+
+    JudgeAgent::fake(fn () => ['verdicts' => [['criterion' => 2, 'reason' => 'It is polite.', 'pass' => true]]]);
+
+    $aiTest = makeAiTest('skips a verdict');
+
+    $aiTest
+        ->driver(new AgentDriver(SupportAgent::class))
+        ->runs(2)
+        ->user('Where is my order?')
+        ->expectMaxWords(3)
+        ->expectRubric('Names the order.', 'Is polite.');
+
+    expect(fn () => $aiTest->execute())->toThrow(AssertionFailedError::class, '1 unjudged run left out.');
+
+    $result = resultFile('skips-a-verdict');
+
+    expect($result->data)->toMatchArray(['passed_runs' => 0, 'unjudged_runs' => 1]);
+
+    expect($result->get('turns')[0]['runs'][0]['judge_error'])
+        ->toBe('LogicException: The judge must return one verdict for each criterion from 1 to 2, but returned verdicts for criteria [2].');
 });
 
 it('gives the judge the earlier turns as context without grading them', function () {
