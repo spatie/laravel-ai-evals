@@ -1,7 +1,8 @@
-# Test your Laravel AI agents against real models with pass rates and readable results
+# Test your Laravel AI agents
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/spatie/laravel-ai-tests.svg?style=flat-square)](https://packagist.org/packages/spatie/laravel-ai-tests)
 [![GitHub Tests Action Status](https://img.shields.io/github/actions/workflow/status/spatie/laravel-ai-tests/run-tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/spatie/laravel-ai-tests/actions?query=workflow%3Arun-tests+branch%3Amain)
+[![GitHub Code Style Action Status](https://img.shields.io/github/actions/workflow/status/spatie/laravel-ai-tests/fix-php-code-style-issues.yml?branch=main&label=code%20style&style=flat-square)](https://github.com/spatie/laravel-ai-tests/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
 [![Total Downloads](https://img.shields.io/packagist/dt/spatie/laravel-ai-tests.svg?style=flat-square)](https://packagist.org/packages/spatie/laravel-ai-tests)
 
 Unit tests with faked responses tell you that your code works. They don't tell you whether your agent gives good answers. This package lets you write Pest tests that talk to your [Laravel AI](https://github.com/laravel/ai) agent with the real model, run every conversation a few times, check each answer, and write a readable YAML result file per test.
@@ -17,24 +18,9 @@ aiTest('tells a customer where their order is')
 
 A test passes when enough of its runs pass. A run passes when all deterministic checks pass and an LLM judge accepts every rubric criterion.
 
-## What these tests are for
-
-These tests check your agent, not the model. They cover the parts you own: the tools, their descriptions and the data they return, the context you pass, and the format and behaviour your system prompt pushes the model towards. They do not measure what the model knows or how well it reasons.
-
-A good rule of thumb: every check and rubric line should point at something you own and could change to fix a failure. If nothing you own could fix it, drop the line.
-
-```php
-// Tests the model's reasoning. When it fails, there is nothing you can change.
-->expectRubric('Explains why the property is null at line 14.')
-
-// Tests your agent. When it fails, you fix the tool, its description or the prompt.
-->expectTools(called: [GetErrorDetailsTool::class])
-->expectRubric('Bases its explanation on the stack frame that the error details tool returned.')
-```
-
 ## Support us
 
-[<img src="https://github-ads.s3.eu-central-1.amazonaws.com/laravel-ai-tests.jpg?t=1" width="419px" />](https://spatie.be/github-ad-click/laravel-ai-tests)
+[<img src="https://spatie.be/github-ad-image/laravel-ai-tests.jpg" width="419px" />](https://spatie.be/github-ad-click/laravel-ai-tests)
 
 We invest a lot of resources into creating [best in class open source packages](https://spatie.be/open-source). You can support us by [buying one of our paid products](https://spatie.be/open-source/support-us).
 
@@ -65,6 +51,95 @@ Exclude the group in `phpunit.xml`:
 ```
 
 Make sure the test environment has the API key of your AI provider.
+
+You can publish the config file with:
+
+```bash
+php artisan vendor:publish --tag="ai-tests-config"
+```
+
+This is the contents of the published config file:
+
+```php
+use Spatie\LaravelAiTests\Judge\JudgeAgent;
+
+return [
+    /*
+     * Every AI test writes its result file to this directory. Commit these
+     * files, so a diff shows how a change moved the results.
+     */
+    'results_path' => base_path('tests/AiTests/results'),
+
+    /*
+     * The number of fresh conversations per test. A test can set its own
+     * number with `runs()`.
+     */
+    'runs' => 3,
+
+    /*
+     * When set, this number of runs is used for every test, including tests
+     * that call `runs()`. Use `AI_TESTS_RUNS=1` to run a test once while you
+     * work on it.
+     */
+    'forced_runs' => env('AI_TESTS_RUNS'),
+
+    /*
+     * The minimum share of runs that must pass for a test to pass. A test can
+     * set its own minimum with `minPassRate()`.
+     */
+    'min_pass_rate' => 0.66,
+
+    'judge' => [
+        /*
+         * The agent that grades the rubric criteria. Extend `JudgeAgent` to
+         * give the judge context about your product.
+         */
+        'agent' => JudgeAgent::class,
+
+        /*
+         * The provider and model of the judge. When they are not set, the
+         * judge uses your default Laravel AI provider and model.
+         */
+        'provider' => env('AI_TESTS_JUDGE_PROVIDER'),
+        'model' => env('AI_TESTS_JUDGE_MODEL'),
+    ],
+
+    'viewer' => [
+        /*
+         * The results viewer is only available in the local environment.
+         */
+        'enabled' => true,
+
+        /*
+         * The URL prefix of the results viewer.
+         */
+        'prefix' => 'ai-tests',
+    ],
+];
+```
+
+To give the judge context about your product, extend `Spatie\LaravelAiTests\Judge\JudgeAgent`, override `instructions()`, and set your class as `judge.agent`.
+
+Optionally, you can publish the views of the results viewer using:
+
+```bash
+php artisan vendor:publish --tag="ai-tests-views"
+```
+
+## What these tests are for
+
+These tests check your agent, not the model. They cover the parts you own: the tools, their descriptions and the data they return, the context you pass, and the format and behaviour your system prompt pushes the model towards. They do not measure what the model knows or how well it reasons.
+
+A good rule of thumb: every check and rubric line should point at something you own and could change to fix a failure. If nothing you own could fix it, drop the line.
+
+```php
+// Tests the model's reasoning. When it fails, there is nothing you can change.
+->expectRubric('Works out why the order is late.')
+
+// Tests your agent. When it fails, you fix the tool, its description or the prompt.
+->expectTools(called: [LookupOrderTool::class])
+->expectRubric('Bases its explanation on the shipment status that the order lookup tool returned.')
+```
 
 ## Writing a test
 
@@ -111,12 +186,21 @@ aiTest('cancels an order after confirmation')
 | `expectMaxWords()` | Maximum number of words in the answer of the turn. |
 | `expectMentions()` | Values the answer must contain, such as an order number or a link. |
 | `expectMentionsInOrder()` | Values the answer must contain in this order. |
-| `expectNotMentions()` | Values the answer must not contain, in any letter case, such as an outdated term. |
+| `expectNotMentions()` | Values the answer must not contain, such as an outdated term. |
 | `expectRubric()` | One or more criteria for the LLM judge. |
 | `expectThat()` | A check written in code, with a label. See [checking with code](#checking-with-code). |
 | `approveAll()` | Approves every tool call that waits for approval in this turn. Without it, they are rejected. |
 
-Tool checks count every tool call of the turn, including the calls after an approval. A tool class is matched by its `name()`, or by its class name when it has no public `name()` method. Tool names are resolved before the first run, so a tool class the container can't build fails the test right away. Words are tokens with at least one letter or digit, so Markdown bullets do not count. A mention is a case-sensitive match anywhere in the answer of the turn. For `expectMentionsInOrder()`, the first mention of each value must come after the first mention of the value before it. Unlike the other mention checks, `expectNotMentions()` ignores case, so `error group` also catches "Error groups", and its failure quotes the text it found. Write rubric criteria as concrete, checkable statements. A vague criterion gives noisy results. The judge grades one turn at a time. For a later turn, it also gets the earlier turns of the run (their prompts, tool calls without results, and answers) as context, so a criterion can refer to "those orders", but only the current turn is graded.
+A few details of the checks:
+
+- Tool checks count every tool call of the turn, including the calls after an approval.
+- A tool class is matched by its `name()`, or by its class name when it has no public `name()` method. Tool names are resolved before the first run, so a tool class the container can't build fails the test right away.
+- Words are tokens with at least one letter or digit, so Markdown bullets do not count.
+- A mention is a match anywhere in the answer of the turn, in any letter case, so `shipment group` also matches "Shipment groups".
+- For `expectMentionsInOrder()`, each value must be mentioned after a mention of the value before it.
+- The failure of `expectNotMentions()` quotes the text it found.
+- Write rubric criteria as concrete, checkable statements. A vague criterion gives noisy results.
+- The judge grades one turn at a time. For a later turn, it also gets the earlier turns of the run (their prompts, tool calls without results, and answers) as context, so a criterion can refer to "those orders", but only the current turn is graded.
 
 ### Test data
 
@@ -163,7 +247,7 @@ aiTest('summarizes an order')
     ->expectRubric('Lists the products of the order.');
 ```
 
-Each run is wrapped in a database transaction that is rolled back afterwards, so changes made by one run do not leak into the next. The data from the `driver()` closure is created once, before the runs.
+Each run is wrapped in a transaction on the default database connection that is rolled back afterwards, so changes made by one run do not leak into the next. Changes on other connections are not rolled back. The data from the `driver()` closure is created once, before the runs.
 
 ### Checking known values
 
@@ -187,7 +271,7 @@ aiTest('links to a late order')
     ->expectRubric(fn (ShopDriver $driver) => "Says that order {$driver->seeder->orders['late-order']->number} is late, and why.");
 ```
 
-Prefer a mention over a rubric criterion for exact values the agent must output, such as links to records, IDs or counts. A mention costs nothing, does not depend on the judge, and its failure names the missing value. Use a rubric criterion when the wording can vary.
+Prefer a mention over a rubric criterion for exact values the agent must output, such as links to records, IDs or counts. A mention costs nothing, does not depend on the judge, and its failure names the missing value. Mentions ignore letter case, so when case matters, for example in a token, check the value with [`expectThat()`](#checking-with-code). Use a rubric criterion when the wording can vary.
 
 `expectNotMentions()` does the same for words the answer must avoid, such as a term your product no longer uses:
 
@@ -203,6 +287,7 @@ aiTest('uses the current terminology')
 When a check needs more than the answer, such as the exact arguments of a tool call or the rows a tool changed, write it in code with `expectThat()`. Give it a label and a closure:
 
 ```php
+use App\Ai\Tools\LookupOrderTool;
 use Spatie\LaravelAiTests\Transcript\Transcript;
 
 aiTest('cancels only the late orders')
@@ -215,13 +300,13 @@ aiTest('cancels only the late orders')
         return $cancelled === ['A-1', 'A-3'] ?: 'Cancelled '.implode(', ', $cancelled).'.';
     })
     ->expectThat('Looks up each order once', function (Transcript $transcript) {
-        $orders = array_column(array_column($transcript->toolCalls, 'arguments'), 'order');
+        $orders = array_column(array_column($transcript->callsTo(LookupOrderTool::class), 'arguments'), 'order');
 
         return count($orders) === count(array_unique($orders));
     });
 ```
 
-The closure receives the driver and the `Transcript` of the turn, by their class or as `$driver` and `$transcript`. The transcript has the prompt, the tool calls with their arguments, result, status and approval (`$transcript->toolCalls`), and the answer (`$transcript->answer()`). Return `true` to pass, `false` to fail, or a string to fail with that string as the reason. When the closure throws an exception, for example a failed `expect()`, the check fails with the message of the exception. The run goes on.
+The closure receives the driver and the `Transcript` of the turn, by their class or as `$driver` and `$transcript`. The transcript has the prompt, the tool calls with their arguments, result, status and approval (`$transcript->toolCalls`), and the answer (`$transcript->answer()`). `$transcript->callsTo()` gives the calls to one tool, by its tool class or name. Return `true` to pass, `false` to fail, or a string to fail with that string as the reason. When the closure throws an exception, for example a failed `expect()`, the check fails with the message of the exception. The run goes on.
 
 Unlike the other closures, this one runs in every run, right after the turn and before the database transaction of the run is rolled back. It sees the rows the run created or changed. It runs in a nested transaction, so a failed query does not break the rest of the run. In the result file and the viewer, the check shows with its label and kind `code`, like the other checks.
 
@@ -285,8 +370,8 @@ class ChatDriver implements Driver, DescribesContext
     public function context(): array
     {
         return [
-            'Scope' => $this->project ? $this->project->name : 'All projects',
-            'Page' => 'Error details',
+            'Scope' => $this->store ? $this->store->name : 'All stores',
+            'Page' => 'Order details',
         ];
     }
 }
@@ -311,13 +396,35 @@ AI_TESTS_RUNS=1 vendor/bin/pest --group=ai --filter="cancels an order"
 
 The minimum pass rate still applies, so the test passes or fails on that one run. The result file is written as usual, and its `runs` shows that it was a quick run. Run the test with its full number of runs before you commit the result.
 
+### Saving costs locally
+
+The agent under test and the judge both run through your Laravel AI providers. To run them with a subscription instead of API credits on your machine, start a local OpenAI-compatible proxy, such as [LiteLLM](https://docs.litellm.ai) with its ChatGPT subscription provider, and point the provider's `url` in your app's `config/ai.php` at it:
+
+```php
+'openai' => [
+    'driver' => 'openai',
+    'key' => env('OPENAI_API_KEY'),
+    'url' => env('OPENAI_URL', 'https://api.openai.com/v1'),
+],
+```
+
+```bash
+OPENAI_URL=http://localhost:4000/v1 AI_TESTS_RUNS=1 vendor/bin/pest --group=ai --filter="cancels an order"
+```
+
+Use `AI_TESTS_RUNS=1` while you iterate on a test. Routing API calls through a subscription is a grey area in the terms of most providers, so only do this locally. Commit result files from a full run against the real API.
+
 ## Results
 
 Every test writes `<results_path>/<slug>.yaml`, where the slug is `Str::slug()` of the description. A new run overwrites the file. Commit the result files, so a diff shows how a prompt or tool change moved the results.
 
 Two AI tests whose descriptions give the same slug, even in different files, throw an error when Pest loads them, so one can't overwrite the result of the other. When you rename or delete a test, its old result file stays, because the package can't tell a removed test from one that was not part of this run, for example with `--filter`. Delete the old file by hand.
 
-The file starts with the facts of the test: `slug`, `title`, `test_file`, `model`, `judge_model`, `context` (only when the driver describes it), `runs`, `passed_runs`, `unjudged_runs` (only when there are any), `pass_rate`, `min_pass_rate`, `passed` and `ran_at`. Then each turn has its prompt, the checks with the result of every run, and every run with its tool calls, its answer and the verdicts. Verdicts list every judged criterion and every failed check, each with its reason. Multi-line answers are written as literal blocks, so they read like the original text. The `status` of a tool call is `completed`, `failed`, `rejected`, `pending` when it still waits for approval, or `no_result` when no result came back for it. The judge only accepts a claimed change when its tool call completed.
+The file starts with the facts of the test: `slug`, `title`, `test_file`, `model`, `judge_model`, `context` (only when the driver describes it), `runs`, `passed_runs`, `unjudged_runs` (only when there are any), `pass_rate`, `min_pass_rate`, `passed` and `ran_at`.
+
+Then each turn has its prompt, the checks with the result of every run, and every run with its tool calls, its answer and the verdicts. Verdicts list every judged criterion and every failed check, each with its reason. Multi-line answers are written as literal blocks, so they read like the original text.
+
+The `status` of a tool call is `completed`, `failed`, `rejected`, `pending` when it still waits for approval, or `no_result` when no result came back for it. The judge only accepts a claimed change when its tool call completed.
 
 ```yaml
 slug: tells-a-customer-where-their-order-is
@@ -339,10 +446,10 @@ turns:
     checks:
       - label: 'Calls `lookup_order`'
         kind: tool
-        passed_runs: 2
+        passed_runs: 1
         runs:
           1: true
-          2: true
+          2: false
       - label: 'Mentions `https://shop.test/orders/1234`'
         kind: mentions
         passed_runs: 1
@@ -378,64 +485,11 @@ turns:
 
 When a run throws an exception, the run fails and its entry in that turn has a `crash`, together with the tool calls and answer it got before the crash. Later turns mark the run as `not_reached`. The other runs still count.
 
-When the judge itself fails, for example on a rate limit, it is not held against the agent. The turn keeps its tool calls and answer and gets a `judge_error`. A run that passed all its other checks but could not be judged is unjudged: it is left out of the pass rate and counted in `unjudged_runs`. A run that failed a check still counts as failed. When no run could be judged, the test fails. The failure message of a test lists every crash and judge error.
+When the judge itself fails, for example on a rate limit or when it does not return one verdict for each criterion, it is not held against the agent. The turn keeps its tool calls and answer and gets a `judge_error`. A run that passed all its other checks but could not be judged is unjudged: it is left out of the pass rate and counted in `unjudged_runs`. A run that failed a check still counts as failed. When no run could be judged, the test fails. The failure message of a test lists every crash and judge error.
 
 ### Viewing results
 
-In the `local` environment, the package registers a small results viewer at `/ai-tests`. It lists the result files and shows each one, with a tab per run. The first failing run is selected. Outside the local environment it returns a 404. Disable it with `ai-tests.viewer.enabled`. A result file that can't be parsed, for example after a merge conflict, is reported and listed as unreadable instead of breaking the viewer. Result files are written to a temporary file first and then moved into place, so the viewer never reads a half-written file.
-
-## Configuration
-
-You can publish the config file with:
-
-```bash
-php artisan vendor:publish --tag="ai-tests-config"
-```
-
-This is the content of the published config file:
-
-```php
-return [
-    'results_path' => base_path('tests/AiTests/results'),
-
-    'runs' => 3,
-
-    'forced_runs' => env('AI_TESTS_RUNS'),
-
-    'min_pass_rate' => 0.66,
-
-    'judge' => [
-        'agent' => JudgeAgent::class,
-        'provider' => env('AI_TESTS_JUDGE_PROVIDER'),
-        'model' => env('AI_TESTS_JUDGE_MODEL'),
-    ],
-
-    'viewer' => [
-        'enabled' => true,
-        'prefix' => 'ai-tests',
-    ],
-];
-```
-
-The judge uses your default Laravel AI provider and model unless you set them. To give the judge context about your product, extend `Spatie\LaravelAiTests\Judge\JudgeAgent`, override `instructions()`, and set your class as `judge.agent`.
-
-### Saving costs locally
-
-The agent under test and the judge both run through your Laravel AI providers. To run them with a subscription instead of API credits on your machine, start a local OpenAI-compatible proxy, such as [LiteLLM](https://docs.litellm.ai) with its ChatGPT subscription provider, and point the provider's `url` in your app's `config/ai.php` at it:
-
-```php
-'openai' => [
-    'driver' => 'openai',
-    'key' => env('OPENAI_API_KEY'),
-    'url' => env('OPENAI_URL', 'https://api.openai.com/v1'),
-],
-```
-
-```bash
-OPENAI_URL=http://localhost:4000/v1 AI_TESTS_RUNS=1 vendor/bin/pest --group=ai --filter="cancels an order"
-```
-
-Use `AI_TESTS_RUNS=1` while you iterate on a test. Routing API calls through a subscription is a grey area in the terms of most providers, so only do this locally. Commit result files from a full run against the real API.
+In the `local` environment, the package registers a small results viewer at `/ai-tests`. It lists the result files and shows each one, with a tab per run. The first failing run is selected. Outside the local environment it returns a 404. Disable it with `ai-tests.viewer.enabled`. A result file that can't be parsed, for example after a merge conflict, is reported and listed as unreadable instead of breaking the viewer.
 
 ## Testing
 

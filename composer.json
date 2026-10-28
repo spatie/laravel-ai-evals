@@ -1,13 +1,14 @@
 {
     "name": "spatie/laravel-ai-tests",
-    "description": "Test your Laravel AI agents against real models with pass rates and readable results",
+    "description": "Test your Laravel AI agents against real models",
     "keywords": [
         "spatie",
         "laravel",
         "laravel-ai",
         "ai",
         "evals",
-        "testing"
+        "testing",
+        "laravel-ai-tests"
     ],
     "homepage": "https://github.com/spatie/laravel-ai-tests",
     "license": "MIT",
