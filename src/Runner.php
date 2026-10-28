@@ -93,29 +93,16 @@ class Runner
     /** @return array<int, array<int, Expectation>> */
     protected function resolveExpectations(AiTest $aiTest, Driver $driver): array
     {
+        $resolve = fn (mixed $value, array $parameters = []): mixed => $this->callWithDriver($value, $driver, $parameters);
+
         try {
             return array_map(
-                fn (Turn $turn): array => $this->ensureLabelled(
-                    $turn->resolveExpectations(fn (mixed $value, array $parameters = []): mixed => $this->callWithDriver($value, $driver, $parameters)),
-                ),
+                fn (Turn $turn): array => $turn->resolveExpectations($resolve),
                 $aiTest->turns,
             );
         } catch (Throwable $exception) {
             throw new LogicException("The AI test \"{$aiTest->description}\" has a check that can't be set up. {$exception->getMessage()}", previous: $exception);
         }
-    }
-
-    /**
-     * @param  array<int, Expectation>  $expectations
-     * @return array<int, Expectation>
-     */
-    protected function ensureLabelled(array $expectations): array
-    {
-        foreach ($expectations as $expectation) {
-            $expectation->label();
-        }
-
-        return $expectations;
     }
 
     /**
@@ -131,10 +118,11 @@ class Runner
     ): RunResult {
         $run = new RunResult($number);
         $unfinishedTurn = null;
-
-        DB::beginTransaction();
+        $transactionLevel = DB::transactionLevel();
 
         try {
+            DB::beginTransaction();
+
             $driver->startConversation();
 
             foreach ($aiTest->turns as $index => $turn) {
@@ -150,7 +138,7 @@ class Runner
             $run->crash = $this->describe($exception);
             $run->crashedTurn = $unfinishedTurn;
         } finally {
-            DB::rollBack();
+            DB::rollBack($transactionLevel);
         }
 
         return $run;
