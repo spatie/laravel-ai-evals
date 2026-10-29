@@ -31,6 +31,8 @@ it('checks a turn with code against the transcript and the data of the run', fun
             ->exists())
         ->toPassCheck('Offers a tracking link', fn ($transcript) => str_contains($transcript->answer(), 'tracking') ?: 'Does not offer a tracking link.')
         ->toPassCheck('Answers in Dutch', fn () => false)
+        ->toPassCheck('Mentions the order', fn (Transcript $transcript) => expect($transcript->answer())->toContain('1234'))
+        ->toPassCheck('Mentions the shipment', fn (Transcript $transcript) => expect($transcript)->answer()->toContain('shipped'))
         ->toPassCheck('Queries a missing table', fn () => DB::table('missing_table')->count() === 0)
         ->prompt('Thanks!')
         ->toPassCheck('Still reaches the database', fn () => DB::table('agent_conversations')->count() === 1);
@@ -38,12 +40,14 @@ it('checks a turn with code against the transcript and the data of the run', fun
     $result = runEvaluation($evaluation);
 
     expect(outcomes($result))
-        ->toHaveCount(5)
+        ->toHaveCount(7)
         ->sequence(
             fn ($outcome) => $outcome->toBe(['Looks up order 1234', true, null]),
             fn ($outcome) => $outcome->toBe(['Stores the conversation of the customer', true, null]),
             fn ($outcome) => $outcome->toBe(['Offers a tracking link', false, 'Does not offer a tracking link.']),
             fn ($outcome) => $outcome->toBe(['Answers in Dutch', false, null]),
+            fn ($outcome) => $outcome->toBe(['Mentions the order', true, null]),
+            fn ($outcome) => $outcome->toBe(['Mentions the shipment', true, null]),
             fn ($outcome) => $outcome->{2}->toStartWith(QueryException::class.': ')->toContain('no such table: missing_table'),
         );
 

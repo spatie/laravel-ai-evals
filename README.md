@@ -260,7 +260,7 @@ evaluate('cancels only the late orders')
     });
 ```
 
-The closure receives the driver and the `Transcript` of the turn, by their class or as `$driver` and `$transcript`. The transcript has the prompt, the tool calls with their arguments, result, status and approval (`$transcript->toolCalls`), and the answer (`$transcript->answer()`). `$transcript->callsTo()` gives the calls to one tool, by its tool class or name, optionally filtered by arguments like `toHaveToolCalls()`. Return `true` to pass, `false` to fail, or a string to fail with that string as the reason. When the closure throws an exception, for example a failed `expect()`, the check fails with the class and message of the exception. The run goes on.
+The closure receives the driver and the `Transcript` of the turn, by their class or as `$driver` and `$transcript`. The transcript has the prompt, the tool calls with their arguments, result, status and approval (`$transcript->toolCalls`), and the answer (`$transcript->answer()`). `$transcript->callsTo()` gives the calls to one tool, by its tool class or name, optionally filtered by arguments like `toHaveToolCalls()`. Return `true` or a passing `expect()` to pass, `false` to fail, or a string to fail with that string as the reason. When the closure throws an exception, for example a failed `expect()`, the check fails with the class and message of the exception. The run goes on.
 
 Unlike the other closures, this one runs in every run, right after the turn and before the database transaction of the run is rolled back. It sees the rows the run created or changed. It runs in a nested transaction, so a failed query does not break the rest of the run.
 
