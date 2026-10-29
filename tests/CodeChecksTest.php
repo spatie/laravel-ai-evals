@@ -14,7 +14,6 @@ it('checks a turn with code against the transcript and the data of the run', fun
     SupportAgent::fake([
         new ToolCall('call-1', 'lookup_order', ['order' => '1234']),
         'Order 1234 shipped yesterday.',
-        'You are welcome.',
     ]);
 
     $evaluation = new Evaluation('checks the order lookup with code');
@@ -34,13 +33,12 @@ it('checks a turn with code against the transcript and the data of the run', fun
         ->toPassCheck('Mentions the order', fn (Transcript $transcript) => expect($transcript->answer())->toContain('1234'))
         ->toPassCheck('Mentions the shipment', fn (Transcript $transcript) => expect($transcript)->answer()->toContain('shipped'))
         ->toPassCheck('Queries a missing table', fn () => DB::table('missing_table')->count() === 0)
-        ->prompt('Thanks!')
         ->toPassCheck('Still reaches the database', fn () => DB::table('agent_conversations')->count() === 1);
 
     $result = runEvaluation($evaluation);
 
     expect(outcomes($result))
-        ->toHaveCount(7)
+        ->toHaveCount(8)
         ->sequence(
             fn ($outcome) => $outcome->toBe(['Looks up order 1234', true, null]),
             fn ($outcome) => $outcome->toBe(['Stores the conversation of the customer', true, null]),
@@ -49,7 +47,6 @@ it('checks a turn with code against the transcript and the data of the run', fun
             fn ($outcome) => $outcome->toBe(['Mentions the order', true, null]),
             fn ($outcome) => $outcome->toBe(['Mentions the shipment', true, null]),
             fn ($outcome) => $outcome->{2}->toStartWith(QueryException::class.': ')->toContain('no such table: missing_table'),
+            fn ($outcome) => $outcome->toBe(['Still reaches the database', true, null]),
         );
-
-    expect(outcomes($result, turn: 2))->toBe([['Still reaches the database', true, null]]);
 });

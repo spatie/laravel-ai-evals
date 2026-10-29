@@ -2,6 +2,7 @@
 
 namespace Spatie\LaravelAiEvals\Checks;
 
+use Illuminate\Support\Str;
 use Spatie\LaravelAiEvals\Results\CheckOutcome;
 use Spatie\LaravelAiEvals\Transcript\Transcript;
 
@@ -18,16 +19,12 @@ class DoesNotContainCheck extends Check
 
     public function evaluate(Transcript $transcript): CheckOutcome
     {
-        $match = $this->firstMatch($transcript->answer());
+        $failureReason = $this->failureReason($transcript->answer());
 
-        return new CheckOutcome(
-            $this->label(),
-            passed: $match === null,
-            reason: $match === null ? null : 'Contains '.static::quote($match).'.',
-        );
+        return $this->outcome($failureReason === null, $failureReason);
     }
 
-    protected function firstMatch(string $answer): ?string
+    protected function failureReason(string $answer): ?string
     {
         $position = mb_stripos($answer, $this->needle);
 
@@ -35,6 +32,8 @@ class DoesNotContainCheck extends Check
             return null;
         }
 
-        return mb_substr($answer, $position, mb_strlen($this->needle));
+        $match = Str::substr($answer, $position, Str::length($this->needle));
+
+        return 'Contains '.static::quote($match).'.';
     }
 }

@@ -16,7 +16,7 @@ class Transcript
     public array $toolCalls = [];
 
     /** @var array<int, string> */
-    public array $texts = [];
+    protected array $texts = [];
 
     public function __construct(
         public string $prompt,

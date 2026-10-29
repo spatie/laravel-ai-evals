@@ -6,11 +6,13 @@ use Illuminate\Support\Str;
 use Spatie\LaravelAiEvals\Results\CheckOutcome;
 use Spatie\LaravelAiEvals\Transcript\Transcript;
 
-abstract class Check implements Expectation
+abstract class Check
 {
+    abstract public function label(): string;
+
     abstract public function evaluate(Transcript $transcript): CheckOutcome;
 
-    protected function outcome(bool $passed, string $failureReason): CheckOutcome
+    protected function outcome(bool $passed, ?string $failureReason = null): CheckOutcome
     {
         return new CheckOutcome($this->label(), $passed, $passed ? null : $failureReason);
     }

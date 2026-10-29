@@ -16,8 +16,6 @@ class Evaluation
 
     public ?int $repeat = null;
 
-    public ?float $minPassRate = null;
-
     /** @var array<int, Turn> */
     public array $turns = [];
 
@@ -33,10 +31,9 @@ class Evaluation
         return $this;
     }
 
-    public function repeat(int $times, ?float $minPassRate = null): static
+    public function repeat(int $times): static
     {
         $this->repeat = $times;
-        $this->minPassRate = $minPassRate;
 
         return $this;
     }
@@ -59,18 +56,17 @@ class Evaluation
         if ($this->turns === []) {
             throw new LogicException("The evaluation \"{$this->description}\" has no prompts. Call ->prompt().");
         }
+    }
 
-        $repeat = AiEvals::repeatCount($this->repeat);
+    public function runCount(): int
+    {
+        $runCount = AiEvals::repeatCount($this->repeat);
 
-        if ($repeat < 1) {
-            throw new LogicException("The evaluation \"{$this->description}\" needs to run at least once, but repeats {$repeat} times.");
+        if ($runCount < 1) {
+            throw new LogicException("The evaluation \"{$this->description}\" needs to run at least once, but repeats {$runCount} times.");
         }
 
-        $minPassRate = AiEvals::minPassRate($this->minPassRate);
-
-        if ($minPassRate < 0 || $minPassRate > 1) {
-            throw new LogicException("The minimum pass rate of the evaluation \"{$this->description}\" must be between 0 and 1, but is {$minPassRate}.");
-        }
+        return $runCount;
     }
 
     public function execute(): void

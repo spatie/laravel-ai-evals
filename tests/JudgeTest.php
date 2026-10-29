@@ -41,13 +41,13 @@ it('grades all criteria of a turn in one judge call and matches verdicts by numb
         && str_contains($prompt->prompt, "1. Names the order.\n2. Is polite."));
 });
 
-it('leaves runs the judge could not grade out of the pass rate, but still fails a run that failed a check', function () {
-    SupportAgent::fake(['Order 1234 shipped.', 'Order 1234 shipped yesterday, as planned.', 'Order 1234 shipped.']);
+it('does not count runs the judge could not grade', function () {
+    SupportAgent::fake(['Order 1234 shipped.', 'Order 1234 shipped.', 'Order 1234 shipped yesterday, as planned.']);
 
     $judgeCalls = 0;
 
     JudgeAgent::fake(function () use (&$judgeCalls) {
-        if (++$judgeCalls > 1) {
+        if (++$judgeCalls === 1) {
             throw new RuntimeException('The judge is rate limited.');
         }
 
@@ -58,15 +58,22 @@ it('leaves runs the judge could not grade out of the pass rate, but still fails 
 
     $evaluation
         ->agent(new AgentDriver(SupportAgent::class))
-        ->repeat(3, minPassRate: 1)
+        ->repeat(3)
         ->prompt('Where is my order?')
         ->toHaveMaxWords(3)
         ->toSatisfy('Names the order.');
 
     expect(failureMessage($evaluation))->toBe(implode("\n", [
-        '1/2 runs passed, below the minimum pass rate of 1. 1 unjudged run left out.',
+        '1/2 runs passed. 1 unjudged run left out.',
         '',
-        'Run 2, turn 1 failed, and the judge failed: RuntimeException: The judge is rate limited.',
+        'Run 1, turn 1 could not be judged: RuntimeException: The judge is rate limited.',
+        '  Prompt:',
+        '    Where is my order?',
+        '  Tool calls: none',
+        '  Answer:',
+        '    Order 1234 shipped.',
+        '',
+        'Run 3, turn 1 failed',
         '  Prompt:',
         '    Where is my order?',
         '  Tool calls: none',
@@ -75,13 +82,6 @@ it('leaves runs the judge could not grade out of the pass rate, but still fails 
         '  Failed checks:',
         '    ✗ At most 3 words',
         '      Answered in 6 words.',
-        '',
-        'Run 3, turn 1 could not be judged: RuntimeException: The judge is rate limited.',
-        '  Prompt:',
-        '    Where is my order?',
-        '  Tool calls: none',
-        '  Answer:',
-        '    Order 1234 shipped.',
     ]));
 });
 

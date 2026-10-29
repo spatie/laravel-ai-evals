@@ -10,7 +10,7 @@ Unit tests with faked responses tell you that your code works. They don't tell y
 ```php
 evaluate('tells a customer where their order is')
     ->agent(fn () => new AgentDriver(SupportAgent::class, as: Customer::factory()->hasOrders(1)->create()))
-    ->repeat(3, minPassRate: 0.66)
+    ->repeat(3)
     ->prompt('Where is my order?')
     ->toHaveToolCalls([LookupOrderTool::class])
     ->toHaveMaxWords(80)
@@ -19,7 +19,7 @@ evaluate('tells a customer where their order is')
     ->toSatisfy('Explains that a shipped order can no longer change address.');
 ```
 
-An eval passes when enough of its runs pass. A run passes when every check of every turn passes, and an LLM judge accepts every `toSatisfy()` criterion.
+An eval passes when every run passes. A run passes when every check of every turn passes, and an LLM judge accepts every `toSatisfy()` criterion. Like Pest evals, it stops at the first failure: a turn that fails a check skips the judge and ends its run, and a failed run ends the eval.
 
 > [!NOTE]
 > Pest has its own [evals plugin](https://pestphp.com/docs/evals). Use that one when a single prompt is enough. This package only exists because Pest evals have no multi-turn conversations. It uses the same concepts and names where it can: the `--evals` flag, `prompt()`, `toSatisfy()`, `repeat()` and the judge environment variables.
@@ -60,13 +60,13 @@ use Spatie\LaravelAiEvals\AiEvals;
 
 AiEvals::judgeUsing(ShopJudgeAgent::class);
 
-AiEvals::repeat(3, minPassRate: 0.66);
+AiEvals::repeat(3);
 ```
 
 | Method | Behaviour |
 | --- | --- |
 | `AiEvals::judgeUsing()` | The agent that grades the `toSatisfy()` criteria, as a class or an instance. Extend `Spatie\LaravelAiEvals\Judge\JudgeAgent` and override `instructions()` to give the judge context about your product. Defaults to `JudgeAgent`. |
-| `AiEvals::repeat()` | The default number of runs per eval, and optionally the minimum share of runs that must pass. Without it, every eval runs once and that run must pass. |
+| `AiEvals::repeat()` | The default number of runs per eval. Without it, every eval runs once. |
 
 These environment variables are read when an eval runs:
 
@@ -111,7 +111,7 @@ evaluate('cancels an order after confirmation')
 
         return new AgentDriver(SupportAgent::class, as: $customer);
     })
-    ->repeat(3, minPassRate: 0.66)
+    ->repeat(3)
     ->prompt('Please cancel order A-1001.')
     ->toHaveToolCalls([LookupOrderTool::class])
     ->not->toHaveToolCalls([CancelOrderTool::class])
@@ -127,7 +127,7 @@ evaluate('cancels an order after confirmation')
 | Method | Behaviour |
 | --- | --- |
 | `agent()` | The agent to talk to: a driver, a Laravel AI agent instance or class, or a closure that sets up the test data and returns one of those. |
-| `repeat()` | The number of fresh conversations, and optionally the minimum share of runs that must pass. Defaults to `AiEvals::repeat()`. |
+| `repeat()` | The number of fresh conversations. Every one of them must pass. Defaults to `AiEvals::repeat()`. |
 | `prompt()` | Starts a turn with this message. Pass a closure that receives the driver when the message depends on the test data. |
 | `toHaveToolCalls()` | Tools that must be called in the turn, by tool class or name, optionally with their arguments. |
 | `toHaveMaxToolCalls()` | The maximum number of tool calls in the turn. |
@@ -323,12 +323,10 @@ If you also use Pest evals, the same `--evals` flag runs both. To save time and 
 AI_EVALS_REPEAT=1 vendor/bin/pest --evals --filter="cancels an order"
 ```
 
-The minimum pass rate still applies, so the eval passes or fails on that one run.
-
-When an eval is below its minimum pass rate, it fails with every failed turn of every failed run: the prompt, the tool calls with their arguments and status, the answer, and each failed check with its reason. For a criterion, the reason is the reasoning of the judge.
+When a run fails, the eval fails with the failed turn of that run: the prompt, the tool calls with their arguments and status, the answer, and each failed check with its reason. For a criterion, the reason is the reasoning of the judge.
 
 ```
-1/3 runs passed, below the minimum pass rate of 0.66.
+1/2 runs passed.
 
 Run 2, turn 1 failed
   Prompt:
@@ -338,24 +336,15 @@ Run 2, turn 1 failed
   Answer:
     Your order shipped yesterday after a long delay in the warehouse.
   Failed checks:
-    ✗ At most 10 words
-      Answered in 11 words.
     ✗ Does not blame anyone.
       The answer blames the warehouse for the delay.
-
-Run 3, turn 2 crashed: RuntimeException: The provider is down.
-  Prompt:
-    Can I track it?
-  Tool calls: none
-  Answer:
-    (no answer)
 ```
 
 The status of a tool call is `completed`, `failed`, `rejected`, `pending` when it still waits for approval, or `no result` when no result came back for it. An approved or rejected call also shows that decision. Long tool arguments are truncated, the answer is not.
 
-When a run throws an exception, the run fails and the turn shows the crash, together with the tool calls and answer it got before the crash. The other runs still count.
+When a run throws an exception, the run fails and the turn shows the crash, together with the tool calls and answer it got before the crash.
 
-When the judge itself fails, for example on a rate limit or when it does not return one valid verdict for each criterion, it is not held against the agent. A run that passed all its other checks but could not be judged is left out of the pass rate. A run that failed a check still counts as failed. When no run could be judged, the eval fails.
+When the judge itself fails, for example on a rate limit or when it does not return one valid verdict for each criterion, it is not held against the agent. A run that passed all its other checks but could not be judged is not counted. A run that failed a check still counts as failed. When no run could be judged, the eval fails.
 
 ### Saving costs locally
 

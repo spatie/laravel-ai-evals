@@ -16,7 +16,7 @@ class RunResult
     public function passed(): bool
     {
         return $this->crash === null
-            && array_filter($this->turns, fn (TurnResult $turn): bool => ! $turn->passed()) === [];
+            && collect($this->turns)->every(fn (TurnResult $turn): bool => $turn->passed());
     }
 
     public function unjudged(): bool
@@ -25,7 +25,9 @@ class RunResult
             return false;
         }
 
-        return array_filter($this->turns, fn (TurnResult $turn): bool => $turn->failed()) === []
-            && array_filter($this->turns, fn (TurnResult $turn): bool => $turn->unjudged()) !== [];
+        $turns = collect($this->turns);
+
+        return $turns->doesntContain(fn (TurnResult $turn): bool => $turn->failed())
+            && $turns->contains(fn (TurnResult $turn): bool => $turn->unjudged());
     }
 }

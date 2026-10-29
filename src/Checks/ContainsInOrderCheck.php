@@ -14,16 +14,18 @@ class ContainsInOrderCheck extends Check
 
     public function label(): string
     {
-        $quoted = array_map(fn (string $needle): string => static::quote($needle), $this->needles);
+        $quoted = collect($this->needles)
+            ->map(fn (string $needle): string => static::quote($needle))
+            ->implode(', then ');
 
-        return 'Contains '.implode(', then ', $quoted);
+        return "Contains {$quoted}";
     }
 
     public function evaluate(Transcript $transcript): CheckOutcome
     {
-        $reason = $this->failureReason($transcript->answer());
+        $failureReason = $this->failureReason($transcript->answer());
 
-        return new CheckOutcome($this->label(), passed: $reason === null, reason: $reason);
+        return $this->outcome($failureReason === null, $failureReason);
     }
 
     protected function failureReason(string $answer): ?string

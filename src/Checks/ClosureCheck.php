@@ -29,14 +29,14 @@ class ClosureCheck extends Check
         try {
             $result = DB::transaction(fn (): mixed => ($this->check)($transcript));
         } catch (Throwable $exception) {
-            return new CheckOutcome($this->label, passed: false, reason: $exception::class.': '.$exception->getMessage());
+            return $this->outcome(false, $exception::class.': '.$exception->getMessage());
         }
 
         return match (true) {
-            $result === true, $this->isExpectation($result) => new CheckOutcome($this->label, passed: true),
-            $result === false => new CheckOutcome($this->label, passed: false),
-            is_string($result) => new CheckOutcome($this->label, passed: false, reason: $result),
-            default => new CheckOutcome($this->label, passed: false, reason: 'Returned '.get_debug_type($result).' instead of true, false or a failure reason.'),
+            $result === true, $this->isExpectation($result) => $this->outcome(true),
+            $result === false => $this->outcome(false),
+            is_string($result) => $this->outcome(false, $result),
+            default => $this->outcome(false, 'Returned '.get_debug_type($result).' instead of true, false or a failure reason.'),
         };
     }
 

@@ -15,8 +15,6 @@ class AiEvals
 
     protected static int $repeat = 1;
 
-    protected static float $minPassRate = 1.0;
-
     /** @param class-string<Agent>|Agent $agent */
     public static function judgeUsing(string|Agent $agent): void
     {
@@ -29,13 +27,9 @@ class AiEvals
         static::$judge = $agent;
     }
 
-    public static function repeat(int $times, ?float $minPassRate = null): void
+    public static function repeat(int $times): void
     {
         static::$repeat = $times;
-
-        if ($minPassRate !== null) {
-            static::$minPassRate = $minPassRate;
-        }
     }
 
     public static function judgeAgent(): Agent
@@ -64,15 +58,9 @@ class AiEvals
         return $repeat ?? static::$repeat;
     }
 
-    public static function minPassRate(?float $minPassRate): float
-    {
-        return $minPassRate ?? static::$minPassRate;
-    }
-
     public static function flush(): void
     {
         static::$judge = JudgeAgent::class;
         static::$repeat = 1;
-        static::$minPassRate = 1.0;
     }
 }

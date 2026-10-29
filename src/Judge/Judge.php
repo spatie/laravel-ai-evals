@@ -2,10 +2,10 @@
 
 namespace Spatie\LaravelAiEvals\Judge;
 
+use Illuminate\Support\Collection;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use LogicException;
 use Spatie\LaravelAiEvals\AiEvals;
-use Spatie\LaravelAiEvals\Checks\JudgeCriterion;
 use Spatie\LaravelAiEvals\Results\CheckOutcome;
 use Spatie\LaravelAiEvals\Transcript\ToolCallRecord;
 use Spatie\LaravelAiEvals\Transcript\Transcript;
@@ -13,20 +13,34 @@ use Spatie\LaravelAiEvals\Transcript\Transcript;
 class Judge
 {
     /**
-     * @param  list<JudgeCriterion>  $criteria
-     * @param  array<int, Transcript>  $earlierTurns
+     * @param  list<string>  $criteria
+     * @param  list<Transcript>  $earlierTurns
      * @return array<int, CheckOutcome>
      */
-    public function evaluate(array $criteria, Transcript $transcript, array $earlierTurns = []): array
+    public function evaluate(array $criteria, Transcript $transcript, array $earlierTurns): array
     {
         if ($criteria === []) {
             return [];
         }
 
+        $verdicts = $this->verdicts($this->prompt($criteria, $transcript, $earlierTurns), count($criteria));
+
+        return collect($criteria)
+            ->map(fn (string $criterion, int $index): CheckOutcome => new CheckOutcome(
+                $criterion,
+                passed: $verdicts[$index + 1]['pass'],
+                reason: $verdicts[$index + 1]['reason'],
+            ))
+            ->all();
+    }
+
+    /** @return Collection<int, array{criterion: int, reason: string, pass: bool}> */
+    protected function verdicts(string $prompt, int $criterionCount): Collection
+    {
         $agent = AiEvals::judgeAgent();
 
         $response = $agent->prompt(
-            $this->prompt($criteria, $transcript, $earlierTurns),
+            $prompt,
             provider: AiEvals::judgeProvider(),
             model: AiEvals::judgeModel(),
         );
@@ -38,24 +52,14 @@ class Judge
         $verdicts = $response['verdicts'] ?? [];
 
         $this->ensureValidVerdicts($verdicts);
-        $this->ensureOneVerdictPerCriterion($verdicts, count($criteria));
+        $this->ensureOneVerdictPerCriterion($verdicts, $criterionCount);
 
-        $verdicts = array_column($verdicts, null, 'criterion');
-
-        return array_map(
-            fn (JudgeCriterion $criterion, int $index): CheckOutcome => new CheckOutcome(
-                $criterion->label(),
-                passed: $verdicts[$index + 1]['pass'],
-                reason: $verdicts[$index + 1]['reason'],
-            ),
-            $criteria,
-            array_keys($criteria),
-        );
+        return collect($verdicts)->keyBy('criterion');
     }
 
     /**
-     * @param  list<JudgeCriterion>  $criteria
-     * @param  array<int, Transcript>  $earlierTurns
+     * @param  list<string>  $criteria
+     * @param  list<Transcript>  $earlierTurns
      */
     protected function prompt(array $criteria, Transcript $transcript, array $earlierTurns): string
     {
@@ -64,7 +68,7 @@ class Judge
         if ($earlierTurns !== []) {
             $sections[] = "# Earlier turns\n\nContext only. Do not grade these turns.";
 
-            foreach (array_values($earlierTurns) as $index => $earlierTurn) {
+            foreach ($earlierTurns as $index => $earlierTurn) {
                 $turnNumber = $index + 1;
 
                 $sections[] = "## Turn {$turnNumber}\n\n{$this->earlierTurn($earlierTurn)}";
@@ -79,33 +83,22 @@ class Judge
 
     protected function earlierTurn(Transcript $transcript): string
     {
-        $lines = ["User: {$transcript->prompt}", ''];
+        $toolCalls = collect($transcript->toolCalls)
+            ->map(fn (ToolCallRecord $toolCall): string => $this->toolCallSummary($toolCall))
+            ->implode("\n");
 
-        foreach ($transcript->toolCalls as $toolCall) {
-            $lines[] = $this->toolCallSummary($toolCall);
-        }
-
-        if ($transcript->toolCalls !== []) {
-            $lines[] = '';
-        }
-
-        $lines[] = $this->answer($transcript);
-
-        return implode("\n", $lines);
+        return collect(["User: {$transcript->prompt}", $toolCalls, $this->answer($transcript)])
+            ->filter()
+            ->implode("\n\n");
     }
 
     protected function transcript(Transcript $transcript): string
     {
-        $lines = ["User: {$transcript->prompt}", ''];
-
-        foreach ($transcript->toolCalls as $toolCall) {
-            $lines[] = $this->toolCall($toolCall);
-            $lines[] = '';
-        }
-
-        $lines[] = $this->answer($transcript);
-
-        return implode("\n", $lines);
+        return collect($transcript->toolCalls)
+            ->map(fn (ToolCallRecord $toolCall): string => $this->toolCall($toolCall))
+            ->prepend("User: {$transcript->prompt}")
+            ->push($this->answer($transcript))
+            ->implode("\n\n");
     }
 
     protected function answer(Transcript $transcript): string
@@ -130,14 +123,12 @@ class Judge
         return "Tool call `{$toolCall->name}` {$toolCall->encodedArguments()} ({$toolCall->status->label()}{$decision})";
     }
 
-    /** @param list<JudgeCriterion> $criteria */
+    /** @param list<string> $criteria */
     protected function numberedCriteria(array $criteria): string
     {
-        return implode("\n", array_map(
-            fn (JudgeCriterion $criterion, int $index): string => ($index + 1).". {$criterion->criterion}",
-            $criteria,
-            array_keys($criteria),
-        ));
+        return collect($criteria)
+            ->map(fn (string $criterion, int $index): string => ($index + 1).". {$criterion}")
+            ->implode("\n");
     }
 
     protected function ensureValidVerdicts(mixed $verdicts): void
@@ -171,9 +162,11 @@ class Judge
     /** @param array<int, array{criterion: int, reason: string, pass: bool}> $verdicts */
     protected function ensureOneVerdictPerCriterion(array $verdicts, int $criterionCount): void
     {
-        $numbers = array_column($verdicts, 'criterion');
-
-        sort($numbers);
+        $numbers = collect($verdicts)
+            ->pluck('criterion')
+            ->sort()
+            ->values()
+            ->all();
 
         if ($numbers !== range(1, $criterionCount)) {
             $returned = implode(', ', $numbers);

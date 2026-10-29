@@ -6,18 +6,21 @@ class EvaluationResult
 {
     /** @param array<int, RunResult> $runs */
     public function __construct(
-        public array $runs,
-        public float $minPassRate,
+        public array $runs = [],
     ) {}
 
     public function passedRuns(): int
     {
-        return count(array_filter($this->runs, fn (RunResult $run): bool => $run->passed()));
+        return collect($this->runs)
+            ->filter(fn (RunResult $run): bool => $run->passed())
+            ->count();
     }
 
     public function unjudgedRuns(): int
     {
-        return count(array_filter($this->runs, fn (RunResult $run): bool => $run->unjudged()));
+        return collect($this->runs)
+            ->filter(fn (RunResult $run): bool => $run->unjudged())
+            ->count();
     }
 
     public function judgedRuns(): int
@@ -25,17 +28,18 @@ class EvaluationResult
         return count($this->runs) - $this->unjudgedRuns();
     }
 
-    public function passRate(): float
+    public function isSettled(int $runCount): bool
     {
-        if ($this->judgedRuns() === 0) {
-            return 0.0;
-        }
-
-        return $this->passedRuns() / $this->judgedRuns();
+        return count($this->runs) === $runCount || $this->hasFailedRun();
     }
 
     public function passed(): bool
     {
-        return $this->judgedRuns() > 0 && $this->passRate() >= $this->minPassRate;
+        return $this->judgedRuns() > 0 && ! $this->hasFailedRun();
+    }
+
+    protected function hasFailedRun(): bool
+    {
+        return $this->passedRuns() < $this->judgedRuns();
     }
 }

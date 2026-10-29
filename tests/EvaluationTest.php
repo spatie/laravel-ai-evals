@@ -43,9 +43,14 @@ it('skips the evaluation without eval mode', function () {
 it('enables eval mode with the evals flag and removes the flag from the arguments', function () {
     Plugin::resetEvalMode();
 
-    expect((new Plugin)->handleArguments(['vendor/bin/pest', '--filter=orders']))->toBe(['vendor/bin/pest', '--filter=orders'])
-        ->and(Plugin::isEvalMode())->toBeFalse()
-        ->and((new Plugin)->handleArguments(['vendor/bin/pest', '--evals', '--filter=orders']))->toBe(['vendor/bin/pest', '--filter=orders'])
+    $argumentsWithoutFlag = (new Plugin)->handleArguments(['vendor/bin/pest', '--filter=orders']);
+    $evalModeWithoutFlag = Plugin::isEvalMode();
+
+    $argumentsWithFlag = (new Plugin)->handleArguments(['vendor/bin/pest', '--evals', '--filter=orders']);
+
+    expect($argumentsWithoutFlag)->toBe(['vendor/bin/pest', '--filter=orders'])
+        ->and($evalModeWithoutFlag)->toBeFalse()
+        ->and($argumentsWithFlag)->toBe(['vendor/bin/pest', '--filter=orders'])
         ->and(Plugin::isEvalMode())->toBeTrue();
 });
 
@@ -59,7 +64,7 @@ it('enables eval mode from the environment, as parallel workers do', function ()
     putenv('PEST_EVALS');
 });
 
-it('fails with the transcript and failed checks of every failed run', function () {
+it('fails with the transcript and failed checks of the failed run, without asking the judge about it', function () {
     SupportAgent::fake([
         new ToolCall('call-1', 'lookup_order', ['order' => '1234']),
         'Order 1234 shipped yesterday.',
@@ -68,21 +73,20 @@ it('fails with the transcript and failed checks of every failed run', function (
 
     JudgeAgent::fake([
         ['verdicts' => [['criterion' => 1, 'reason' => 'It does not blame anyone.', 'pass' => true]]],
-        ['verdicts' => [['criterion' => 1, 'reason' => 'It blames the warehouse.', 'pass' => false]]],
     ]);
 
     $evaluation = new Evaluation('answers briefly');
 
     $evaluation
         ->agent(new AgentDriver(SupportAgent::class))
-        ->repeat(2, minPassRate: 1)
+        ->repeat(2)
         ->prompt('Where is order 1234?')
         ->toHaveToolCalls([LookupOrderTool::class])
         ->toHaveMaxWords(5)
         ->toSatisfy('Does not blame anyone.');
 
     expect(failureMessage($evaluation))->toBe(implode("\n", [
-        '1/2 runs passed, below the minimum pass rate of 1.',
+        '1/2 runs passed.',
         '',
         'Run 2, turn 1 failed',
         '  Prompt:',
@@ -96,9 +100,9 @@ it('fails with the transcript and failed checks of every failed run', function (
         '      Did not call `lookup_order`.',
         '    ✗ At most 5 words',
         '      Answered in 11 words.',
-        '    ✗ Does not blame anyone.',
-        '      It blames the warehouse.',
     ]));
+
+    JudgeAgent::assertPromptedTimes(1);
 });
 
 it('fails with the crash and the transcript of the crashed turn, with long tool arguments truncated', function () {
@@ -113,7 +117,7 @@ it('fails with the crash and the transcript of the crashed turn, with long tool 
         ->prompt('Cancel order 1234.');
 
     expect(failureMessage($evaluation))->toBe(implode("\n", [
-        '0/1 runs passed, below the minimum pass rate of 1.',
+        '0/1 runs passed.',
         '',
         'Run 1, turn 1 crashed: LogicException: The agent kept asking for approval after 5 rounds.',
         '  Prompt:',
@@ -263,12 +267,12 @@ it('crashes a follow-up turn when the agent does not remember the conversation',
         ->toContain('Run 1, turn 2 crashed: LogicException: The agent '.SupportAgent::class.' does not remember the conversation');
 });
 
-it('passes with the configured repeat and minimum pass rate when two of three runs pass', function () {
-    AiEvals::repeat(3, minPassRate: 0.66);
+it('passes when every run of the configured repeat passes', function () {
+    AiEvals::repeat(3);
 
-    SupportAgent::fake(['Shipped.', 'Your order shipped yesterday afternoon.', 'Shipped.']);
+    SupportAgent::fake(['Shipped.', 'Shipped.', 'Shipped.']);
 
-    $evaluation = new Evaluation('passes two of three runs');
+    $evaluation = new Evaluation('passes three runs');
 
     $evaluation
         ->agent(new AgentDriver(SupportAgent::class))
@@ -277,7 +281,7 @@ it('passes with the configured repeat and minimum pass rate when two of three ru
 
     $result = runEvaluation($evaluation);
 
-    expect($result->passedRuns())->toBe(2)
+    expect($result->passedRuns())->toBe(3)
         ->and($result->passed())->toBeTrue();
 });
 
@@ -291,15 +295,15 @@ it('runs once and requires that run to pass when nothing is configured', functio
         ->prompt('Where is my order?')
         ->toHaveMaxWords(2);
 
-    expect(failureMessage($evaluation))->toStartWith('0/1 runs passed, below the minimum pass rate of 1.');
+    expect(failureMessage($evaluation))->toStartWith('0/1 runs passed.');
 });
 
-it('uses the configured minimum pass rate when an evaluation only sets the repeat', function () {
-    AiEvals::repeat(1, minPassRate: 0.67);
+it('stops at the first failed run, with the repeat of the evaluation over the configured one', function () {
+    AiEvals::repeat(1);
 
     SupportAgent::fake(['Shipped.', 'Your order shipped yesterday afternoon.', 'Shipped.']);
 
-    $evaluation = new Evaluation('just misses the minimum pass rate');
+    $evaluation = new Evaluation('fails the second run');
 
     $evaluation
         ->agent(new AgentDriver(SupportAgent::class))
@@ -307,7 +311,28 @@ it('uses the configured minimum pass rate when an evaluation only sets the repea
         ->prompt('Where is my order?')
         ->toHaveMaxWords(2);
 
-    expect(failureMessage($evaluation))->toStartWith('2/3 runs passed, below the minimum pass rate of 0.67.');
+    $result = runEvaluation($evaluation);
+
+    expect($result->runs)->toHaveCount(2)
+        ->and($result->passed())->toBeFalse();
+});
+
+it('ends a run at the first failed turn', function () {
+    SupportAgent::fake(['Your order shipped yesterday afternoon.', 'Yes.']);
+
+    $evaluation = new Evaluation('answers briefly in every turn');
+
+    $evaluation
+        ->agent(fn () => ShopDriver::forNewCustomer())
+        ->prompt('Where is my order?')
+        ->toHaveMaxWords(2)
+        ->prompt('Can I track it?');
+
+    $result = runEvaluation($evaluation);
+
+    expect($result->runs[0]->turns)->toHaveCount(1);
+
+    SupportAgent::assertNotPrompted('Can I track it?');
 });
 
 it('forces the number of runs over the repeat of the evaluation', function () {
@@ -319,7 +344,7 @@ it('forces the number of runs over the repeat of the evaluation', function () {
 
     $evaluation
         ->agent(new AgentDriver(SupportAgent::class))
-        ->repeat(3, minPassRate: 1)
+        ->repeat(3)
         ->prompt('Where is my order?')
         ->toHaveMaxWords(2);
 
@@ -328,17 +353,13 @@ it('forces the number of runs over the repeat of the evaluation', function () {
     unset($_SERVER['AI_EVALS_REPEAT']);
 });
 
-it('refuses an invalid repeat or minimum pass rate', function (int $times, float $minPassRate, string $message) {
+it('refuses a repeat without runs', function () {
     $evaluation = new Evaluation('is misconfigured');
 
     $evaluation
         ->agent(new AgentDriver(SupportAgent::class))
-        ->repeat($times, $minPassRate)
+        ->repeat(0)
         ->prompt('Where is my order?');
 
-    expect(fn () => $evaluation->execute())->toThrow(LogicException::class, $message);
-})->with([
-    'no runs' => [0, 0.5, 'needs to run at least once, but repeats 0 times'],
-    'a pass rate above 1' => [3, 66, 'must be between 0 and 1, but is 66'],
-    'a negative pass rate' => [3, -0.5, 'must be between 0 and 1, but is -0.5'],
-]);
+    expect(fn () => $evaluation->execute())->toThrow(LogicException::class, 'needs to run at least once, but repeats 0 times');
+});

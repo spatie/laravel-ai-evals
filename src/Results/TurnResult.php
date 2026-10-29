@@ -20,7 +20,7 @@ class TurnResult
 
     public function failed(): bool
     {
-        return array_filter($this->outcomes, fn (CheckOutcome $outcome): bool => ! $outcome->passed) !== [];
+        return collect($this->outcomes)->contains(fn (CheckOutcome $outcome): bool => ! $outcome->passed);
     }
 
     public function unjudged(): bool

@@ -12,8 +12,6 @@ use Spatie\LaravelAiEvals\Checks\ContainsCheck;
 use Spatie\LaravelAiEvals\Checks\ContainsInOrderCheck;
 use Spatie\LaravelAiEvals\Checks\DoesNotCallToolCheck;
 use Spatie\LaravelAiEvals\Checks\DoesNotContainCheck;
-use Spatie\LaravelAiEvals\Checks\Expectation;
-use Spatie\LaravelAiEvals\Checks\JudgeCriterion;
 use Spatie\LaravelAiEvals\Checks\MaxToolCallsCheck;
 use Spatie\LaravelAiEvals\Checks\MaxWordsCheck;
 use Spatie\LaravelAiEvals\Transcript\Transcript;
@@ -25,7 +23,7 @@ class Turn
 
     protected bool $negated = false;
 
-    /** @var array<int, Closure(Closure(mixed, array<string, mixed>=): mixed): array<int, Expectation>> */
+    /** @var array<int, Closure(Closure(mixed, array<string, mixed>=): mixed): array<int, Check|string>> */
     protected array $expectationFactories = [];
 
     public function __construct(
@@ -88,10 +86,9 @@ class Turn
     {
         $negated = $this->takeNegation();
 
-        $this->expectationFactories[] = fn (Closure $resolve): array => array_map(
-            fn (string $needle): Check => $negated ? new DoesNotContainCheck($needle) : new ContainsCheck($needle),
-            $this->resolveStrings($resolve, $needles, 'toContain()'),
-        );
+        $this->expectationFactories[] = fn (Closure $resolve): array => collect($this->resolveStrings($resolve, $needles, 'toContain()'))
+            ->map(fn (string $needle): Check => $negated ? new DoesNotContainCheck($needle) : new ContainsCheck($needle))
+            ->all();
 
         return $this;
     }
@@ -111,10 +108,7 @@ class Turn
     {
         $this->ensureNotNegated('toSatisfy');
 
-        $this->expectationFactories[] = fn (Closure $resolve): array => array_map(
-            fn (string $criterion): JudgeCriterion => new JudgeCriterion($criterion),
-            $this->resolveStrings($resolve, [$criterion], 'toSatisfy()'),
-        );
+        $this->expectationFactories[] = fn (Closure $resolve): array => $this->resolveStrings($resolve, [$criterion], 'toSatisfy()');
 
         return $this;
     }
@@ -151,7 +145,7 @@ class Turn
 
     /**
      * @param  Closure(mixed, array<string, mixed>=): mixed  $resolve
-     * @return array<int, Expectation>
+     * @return array<int, Check|string>
      */
     public function resolveExpectations(Closure $resolve): array
     {
@@ -159,10 +153,9 @@ class Turn
             throw new LogicException('->not must be followed by toContain() or toHaveToolCalls().');
         }
 
-        return array_merge(...array_map(
-            fn (Closure $factory): array => $factory($resolve),
-            $this->expectationFactories,
-        ));
+        return collect($this->expectationFactories)
+            ->flatMap(fn (Closure $factory): array => $factory($resolve))
+            ->all();
     }
 
     /** @return array<int, Check> */
@@ -221,10 +214,9 @@ class Turn
      */
     protected function resolveStrings(Closure $resolve, array $values, string $method): array
     {
-        return array_merge(...array_map(
-            fn (string|Closure $value): array => $this->strings($resolve($value), $method),
-            $values,
-        ));
+        return collect($values)
+            ->flatMap(fn (string|Closure $value): array => $this->strings($resolve($value), $method))
+            ->all();
     }
 
     /** @return array<int, string> */

@@ -3,13 +3,12 @@
 namespace Spatie\LaravelAiEvals;
 
 use Closure;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Approvals\PendingApproval;
 use Laravel\Ai\Contracts\Agent;
 use LogicException;
 use Spatie\LaravelAiEvals\Checks\Check;
-use Spatie\LaravelAiEvals\Checks\Expectation;
-use Spatie\LaravelAiEvals\Checks\JudgeCriterion;
 use Spatie\LaravelAiEvals\Drivers\AgentDriver;
 use Spatie\LaravelAiEvals\Drivers\Driver;
 use Spatie\LaravelAiEvals\Judge\Judge;
@@ -22,8 +21,6 @@ use Throwable;
 
 class Runner
 {
-    protected const MaxApprovalRounds = 5;
-
     public function __construct(
         protected Judge $judge,
     ) {}
@@ -32,23 +29,25 @@ class Runner
     {
         $evaluation->ensureRunnable();
 
+        $runCount = $evaluation->runCount();
+
         $this->skipConversationTitles();
 
         $driver = $this->resolveDriver($evaluation);
 
-        $prompts = array_map(
-            fn (Turn $turn): string => $this->callWithDriver($turn->prompt, $driver),
-            $evaluation->turns,
-        );
+        $prompts = collect($evaluation->turns)
+            ->map(fn (Turn $turn): string => $this->callWithDriver($turn->prompt, $driver))
+            ->all();
 
         $expectations = $this->resolveExpectations($evaluation, $driver);
 
-        $runs = array_map(
-            fn (): RunResult => $this->runOnce($evaluation, $driver, $prompts, $expectations),
-            range(1, AiEvals::repeatCount($evaluation->repeat)),
-        );
+        $result = new EvaluationResult;
 
-        return new EvaluationResult($runs, AiEvals::minPassRate($evaluation->minPassRate));
+        while (! $result->isSettled($runCount)) {
+            $result->runs[] = $this->runOnce($evaluation, $driver, $prompts, $expectations);
+        }
+
+        return $result;
     }
 
     protected function skipConversationTitles(): void
@@ -81,16 +80,15 @@ class Runner
         return app()->call($value, [...$parameters, $driver::class => $driver, 'driver' => $driver]);
     }
 
-    /** @return array<int, array<int, Expectation>> */
+    /** @return array<int, array<int, Check|string>> */
     protected function resolveExpectations(Evaluation $evaluation, Driver $driver): array
     {
         $resolve = fn (mixed $value, array $parameters = []): mixed => $this->callWithDriver($value, $driver, $parameters);
 
         try {
-            return array_map(
-                fn (Turn $turn): array => $turn->resolveExpectations($resolve),
-                $evaluation->turns,
-            );
+            return collect($evaluation->turns)
+                ->map(fn (Turn $turn): array => $turn->resolveExpectations($resolve))
+                ->all();
         } catch (Throwable $exception) {
             throw new LogicException("The evaluation \"{$evaluation->description}\" has a check that can't be set up. {$exception->getMessage()}", previous: $exception);
         }
@@ -98,7 +96,7 @@ class Runner
 
     /**
      * @param  array<int, string>  $prompts
-     * @param  array<int, array<int, Expectation>>  $expectations
+     * @param  array<int, array<int, Check|string>>  $expectations
      */
     protected function runOnce(
         Evaluation $evaluation,
@@ -120,9 +118,14 @@ class Runner
 
                 $this->converse($driver, $turn, $unfinishedTurn);
 
-                $run->turns[] = $this->evaluate($expectations[$index], $unfinishedTurn, array_column($run->turns, 'transcript'));
+                $turnResult = $this->evaluate($expectations[$index], $unfinishedTurn, Arr::pluck($run->turns, 'transcript'));
 
+                $run->turns[] = $turnResult;
                 $unfinishedTurn = null;
+
+                if ($turnResult->failed()) {
+                    break;
+                }
             }
         } catch (Throwable $exception) {
             $run->crash = $this->describe($exception);
@@ -140,9 +143,11 @@ class Runner
 
         $transcript->addResponse($response);
 
+        $maxRounds = 5;
+
         for ($round = 1; $response->pendingApprovals->isNotEmpty(); $round++) {
-            if ($round > static::MaxApprovalRounds) {
-                throw new LogicException('The agent kept asking for approval after '.static::MaxApprovalRounds.' rounds.');
+            if ($round > $maxRounds) {
+                throw new LogicException("The agent kept asking for approval after {$maxRounds} rounds.");
             }
 
             $decisions = $response->pendingApprovals
@@ -158,21 +163,26 @@ class Runner
     }
 
     /**
-     * @param  array<int, Expectation>  $expectations
+     * @param  array<int, Check|string>  $expectations
      * @param  array<int, Transcript>  $earlierTurns
      */
     protected function evaluate(array $expectations, Transcript $transcript, array $earlierTurns): TurnResult
     {
-        $checks = array_filter($expectations, fn (Expectation $expectation): bool => $expectation instanceof Check);
-        $criteria = array_filter($expectations, fn (Expectation $expectation): bool => $expectation instanceof JudgeCriterion);
+        [$checks, $criteria] = collect($expectations)->partition(fn (Check|string $expectation): bool => $expectation instanceof Check);
 
-        $outcomes = array_values(array_map(
-            fn (Check $check): CheckOutcome => $check->evaluate($transcript),
-            $checks,
-        ));
+        $outcomes = $checks
+            ->map(fn (Check $check): CheckOutcome => $check->evaluate($transcript))
+            ->values()
+            ->all();
+
+        $turnResult = new TurnResult($transcript, $outcomes);
+
+        if ($turnResult->failed()) {
+            return $turnResult;
+        }
 
         try {
-            $judgeOutcomes = $this->judge->evaluate(array_values($criteria), $transcript, $earlierTurns);
+            $judgeOutcomes = $this->judge->evaluate($criteria->values()->all(), $transcript, $earlierTurns);
         } catch (Throwable $exception) {
             return new TurnResult($transcript, $outcomes, judgeError: $this->describe($exception));
         }
