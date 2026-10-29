@@ -32,6 +32,8 @@ class Runner
     {
         $evaluation->ensureRunnable();
 
+        $this->skipConversationTitles();
+
         $driver = $this->resolveDriver($evaluation);
 
         $prompts = array_map(
@@ -47,6 +49,12 @@ class Runner
         );
 
         return new EvaluationResult($runs, AiEvals::minPassRate($evaluation->minPassRate));
+    }
+
+    protected function skipConversationTitles(): void
+    {
+        // A generated title costs an extra model call per run and no check reads it.
+        config()->set('ai.conversations.generate_title', false);
     }
 
     protected function resolveDriver(Evaluation $evaluation): Driver

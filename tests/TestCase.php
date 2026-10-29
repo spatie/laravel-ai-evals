@@ -38,7 +38,6 @@ class TestCase extends Orchestra
     protected function defineEnvironment($app): void
     {
         $app['config']->set('database.default', 'testing');
-        $app['config']->set('ai.conversations.generate_title', false);
     }
 
     protected function defineDatabaseMigrations(): void
