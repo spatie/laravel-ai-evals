@@ -36,7 +36,7 @@ class ContainsInOrderCheck extends Check
 
             if ($position !== false) {
                 $previousNeedle = $needle;
-                $offset = $position + 1;
+                $offset = $position + mb_strlen($needle);
 
                 continue;
             }

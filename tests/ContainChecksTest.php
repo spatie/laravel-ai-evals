@@ -20,7 +20,8 @@ it('checks that the answer contains each value, in order when asked, ignoring ca
         ->toContainInOrder('order a-2', 'ORDER A-1')
         ->toContainInOrder('A-1', 'A-2')
         ->toContainInOrder('A-1', 'order')
-        ->toContainInOrder('A-2', 'A-9');
+        ->toContainInOrder('A-2', 'A-9')
+        ->toContainInOrder('Order A-1 is late', 'late');
 
     expect(outcomes(runEvaluation($evaluation)))->toBe([
         ['Contains `a-1`', true, null],
@@ -30,6 +31,7 @@ it('checks that the answer contains each value, in order when asked, ignoring ca
         ['Contains `A-1`, then `A-2`', false, 'Contains `A-2` before `A-1`.'],
         ['Contains `A-1`, then `order`', true, null],
         ['Contains `A-2`, then `A-9`', false, 'Does not contain `A-9`.'],
+        ['Contains `Order A-1 is late`, then `late`', false, 'Contains `late` before `Order A-1 is late`.'],
     ]);
 });
 
