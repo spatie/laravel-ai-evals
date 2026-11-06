@@ -28,9 +28,13 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu-latest, windows-latest]
-        php: [8.5, 8.4, 8.3]
+        php: [8.6, 8.5, 8.4, 8.3]
         laravel: [13.*, 12.*]
         stability: [prefer-lowest, prefer-stable]
+        exclude:
+          # ParaTest's PHP 8.6 support requires PHPUnit 13.3+, which Testbench 10 rejects.
+          - php: 8.6
+            laravel: 12.*
         include:
           - laravel: 13.*
             testbench: 11.*
@@ -49,6 +53,12 @@ jobs:
           php-version: ${{ matrix.php }}
           extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo
           coverage: none
+
+      - name: Verify PHP runtime
+        shell: bash
+        run: |
+          php -v
+          php -r 'exit(PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION === "${{ matrix.php }}" ? 0 : 1);'
 
       - name: Setup problem matchers
         run: |
